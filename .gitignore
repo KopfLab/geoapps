@@ -25,6 +25,9 @@ plots/**/*
 ehthumbs.db
 Thumbs.db
 
+# ruby
+Gemfile.lock
+
 # exclude R & Rstudio temp files
 *.utf8.md
 *.knit.md
