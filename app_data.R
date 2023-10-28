@@ -28,22 +28,13 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
     cols = c("class", "title", "credits" = "integer", "Spring 2023", "Fall 2023", "Spring 2024", "Fall 2024")
   )
 
-  # paths
+  # path recommendations
   paths <- callModule(
     module_data_table_server, id = "paths",
     data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
     report_error = report_error,  reload_data = reload_data,
     sheet = "paths",
-    cols = c("path", "label")
-  )
-
-  # path recommendations
-  path_recs <- callModule(
-    module_data_table_server, id = "path_recs",
-    data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
-    report_error = report_error,  reload_data = reload_data,
-    sheet = "path_recs",
-    cols = c("path", "category", "rec_min", "class", "reason")
+    cols = c("path", "category", "category_description", "rec_min", "class", "reason")
   )
 
   # (re-) load data event =====
@@ -91,7 +82,6 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
     tryCatch({
       classes$read_data(ignore_other_cols = TRUE)
       paths$read_data(ignore_other_cols = TRUE)
-      path_recs$read_data(ignore_other_cols = TRUE)
     },
     error = function(e) {
       log_error(ns = ns, "data read failed", user_msg = "Data reading error", error = e)
@@ -117,6 +107,7 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
         unlock_app()
       } else {
         # reset
+        classes$reset()
         paths$reset()
         #shinyjs::hide("menu", asis = TRUE)
         log_info(ns = ns, "app stays locked")
@@ -141,8 +132,7 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
     reload_data = reload_data,
     is_authenticated = is_authenticated,
     classes = classes,
-    paths = paths,
-    path_recs = path_recs
+    paths = paths
   )
 }
 

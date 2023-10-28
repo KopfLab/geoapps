@@ -17,17 +17,17 @@ module_paths_server <- function(input, output, session, data) {
   })
 
   # get path recommendations
-  get_path_recs <- reactive({
-    validate(need(data$path_recs$get_data(), "something went wrong retrieving the data"))
-    data$path_recs$get_data() |>
+  get_paths <- reactive({
+    validate(need(data$paths$get_data(), "something went wrong retrieving the data"))
+    data$paths$get_data() |>
       dplyr::select(-".rowid", -".add", -".update", -".delete") |>
-      fill_down_columns(c("path", "category", "rec_min"))
+      prep_path_recommendations()
   })
 
-  # get paths
-  get_paths <- reactive({
-    req(get_path_recs())
-    get_path_recs() |> dplyr::pull(path) |> unique()
+  # get path names
+  get_paths_list <- reactive({
+    req(get_paths())
+    get_paths() |> dplyr::pull(path) |> unique()
   })
 
   # selected path
@@ -40,10 +40,9 @@ module_paths_server <- function(input, output, session, data) {
   get_classes <- reactive({
     req(get_selected_path())
     req(get_paths())
-    req(get_path_recs())
     req(get_ud_classes())
     log_info(ns = ns, "loading path", user_msg = sprintf("Loading %s path", get_selected_path()))
-    get_path_classes(input$path, get_path_recs(), get_ud_classes()) |>
+    get_path_classes(input$path, get_paths(), get_ud_classes()) |>
       dplyr::mutate(id = .data$class)
   })
 
@@ -54,8 +53,8 @@ module_paths_server <- function(input, output, session, data) {
     tagList(
       selectInput(
         ns("path"), "Select path:",
-        choices = c("Select path" = "", get_paths()),
-        selected = if (is_dev_mode()) get_paths()[1] else NULL
+        choices = c("Select path" = "", get_paths_list()),
+        selected = if (is_dev_mode()) get_paths_list()[1] else NULL
       ),
 
       fluidRow(
@@ -97,7 +96,14 @@ module_paths_server <- function(input, output, session, data) {
     get_data = get_classes,
     id_column = "id",
     available_columns = list(
-      Category = category_info,
+      Category =
+        ifelse(
+          !is.na(category_description),
+          sprintf("%s<br/><i>%s</i>",
+                  htmltools::htmlEscape(category_info),
+                  htmltools::htmlEscape(category_description)),
+          htmltools::htmlEscape(category_info)
+        ),
       Class = sprintf("%s(%s)", class, credits),
       Title = title,
       `Relevance for this path` = reason,
@@ -108,9 +114,11 @@ module_paths_server <- function(input, output, session, data) {
     dom = "ft",
     selection = "multiple",
     # row grouping
+    render_html = "Category",
     extensions = c("RowGroup", "FixedHeader"),
     rowGroup = list(dataSrc = 0),
     columnDefs = list(list(visible = FALSE, targets = 0)),
+    # scrolling
     scrollX = TRUE,
     fixedHeader = TRUE,
     # formatting

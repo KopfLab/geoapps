@@ -26,6 +26,17 @@ complete_semester_availabilities <- function(df) {
     )
 }
 
+# prepare path recommmendation classes
+prep_path_recommendations <- function(paths) {
+  paths |>
+    fill_down_columns(c("path", "category")) |>
+    dplyr::mutate(
+      category_description = .data$category_description[1],
+      rec_min = .data$rec_min[1],
+      .by = c("path", "category")
+    )
+}
+
 # get all timeslot options
 get_all_timeslots <- function(df) {
   df |>
@@ -53,9 +64,9 @@ get_classes_above_level <- function(classes, level) {
 }
 
 # get path specific list of classes
-get_path_classes <- function(path, path_recs, classes) {
+get_path_classes <- function(path, paths, classes) {
   path_classes <-
-    path_recs |>
+    paths |>
     dplyr::filter(path == !!path) |>
     dplyr::left_join(classes, by = "class")
 
