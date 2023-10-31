@@ -56,22 +56,24 @@ module_paths_server <- function(input, output, session, data) {
         choices = c("Select path" = "", get_paths_list()),
         selected = if (is_dev_mode()) get_paths_list()[1] else NULL
       ),
-
-      fluidRow(
-        div(id = ns("path_box"),
-            shinydashboard::box(
-              title = span("Classes recommended for the ", tags$strong(textOutput(ns("path_label"), inline = TRUE)), " path"),
-              div(
-                style = "position: absolute; right: 10px; top: 5px;",
-                module_selector_table_deselect_all_button(ns("classes"), border = FALSE),
-                actionButton(ns("check"), "Check", icon = icon("check"), style = "border: 0;") |>
-                  add_tooltip("Check selected classes for fulfillment of degree requirementes (degree audit)."),
+      div(id = ns("path_box"),
+          shinydashboard::box(
+            title =
+              span(
+                "Classes recommended for the ",
+                tags$strong(textOutput(ns("path_label"), inline = TRUE)),
+                " path",
+                div(
+                  style = "position: absolute; right: 10px; top: 5px;",
+                  module_selector_table_deselect_all_button(ns("classes"), border = FALSE),
+                  actionButton(ns("check"), "Check", icon = icon("check"), style = "border: 0;") |>
+                    add_tooltip("Check selected classes for fulfillment of degree requirementes (degree audit)."),
+                )
               ), width = 12,
-              status = "info", solidHeader = TRUE,
-              module_selector_table_ui(ns("classes"))
-            )
-        ) |> shinyjs::hidden()
-      )
+            status = "info", solidHeader = TRUE,
+            module_selector_table_ui(ns("classes"))
+          )
+      ) |> shinyjs::hidden()
     )
   })
 
