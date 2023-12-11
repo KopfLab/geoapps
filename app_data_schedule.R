@@ -1,7 +1,7 @@
 # data server ----
 # @param data_sheet_id google sheets id with the app data
 # @param data_folder_id google drive folder id for file storage
-module_data_server <- function(input, output, session, data_sheet_id, gs_key_file) {
+module_data_schedule_server <- function(input, output, session, data_sheet_id, gs_key_file) {
 
   # namespace
   ns <- session$ns
@@ -12,6 +12,7 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
     file_path = NULL,
     error = FALSE
   )
+  local_path <- "local_data_schedule.xlsx"
 
   # data tables =========
   get_local_file <- reactive({ values$file_path })
@@ -25,16 +26,34 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
     data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
     report_error = report_error,  reload_data = reload_data,
     sheet = "classes",
-    cols = c("class", "title", "credits" = "integer", "Spring 2023", "Fall 2023", "Spring 2024", "Fall 2024")
+    cols = c("class", "title", "credits" = "integer", "inactive" = "logical")
   )
 
-  # path recommendations
-  paths <- callModule(
-    module_data_table_server, id = "paths",
+  # instructors
+  instructors <- callModule(
+    module_data_table_server, id = "instructors",
     data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
     report_error = report_error,  reload_data = reload_data,
-    sheet = "paths",
-    cols = c("path", "category", "category_description", "rec_min", "class", "reason")
+    sheet = "instructors",
+    cols = c("instructor_id", "last_name", "first_name", "department", "position", "inactive" = "logical")
+  )
+
+  # not teaching
+  not_teaching <- callModule(
+    module_data_table_server, id = "not_teaching",
+    data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
+    report_error = report_error,  reload_data = reload_data,
+    sheet = "not_teaching",
+    cols = c("term", "instructor_id", "reason")
+  )
+
+  # schedule
+  schedule <- callModule(
+    module_data_table_server, id = "schedule",
+    data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
+    report_error = report_error,  reload_data = reload_data,
+    sheet = "schedule",
+    cols = c("term", "class", "section", "subtitle", "instructor_id", "enrollment" = "integer", "building", "room", "days", "start_time", "end_time", "deleted" = "logical", "canceled" = "logical")
   )
 
   # (re-) load data event =====
@@ -52,15 +71,15 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
     values$file_path <-
       tryCatch({
         # don't download from scratch every time if in development mode
-        if (is_dev_mode() && file.exists("local_data.xlsx")) {
-          file_path <- "local_data.xlsx"
+        if (is_dev_mode() && file.exists(local_path)) {
+          file_path <- local_path
           log_debug(ns = ns, "in DEV mode, using local data file")
         } else
           file_path <- download_gs(data_sheet_id, gs_key_file = gs_key_file)
 
         # save locally if in dev mode
-        if (is_dev_mode() && !file.exists("local_data.xlsx")) {
-          file.copy(file_path, "local_data.xlsx")
+        if (is_dev_mode() && !file.exists(local_path)) {
+          file.copy(file_path, local_path)
           log_debug(ns = ns, "in DEV mode, saving downloaded data to local file")
         }
         file_path
@@ -81,7 +100,9 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
     # reading data sheets
     tryCatch({
       classes$read_data(ignore_other_cols = TRUE)
-      paths$read_data(ignore_other_cols = TRUE)
+      instructors$read_data(ignore_other_cols = TRUE)
+      not_teaching$read_data(ignore_other_cols = TRUE)
+      schedule$read_data(ignore_other_cols = TRUE)
     },
     error = function(e) {
       log_error(ns = ns, "data read failed", user_msg = "Data reading error", error = e)
@@ -108,7 +129,9 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
       } else {
         # reset
         classes$reset()
-        paths$reset()
+        instructors$reset()
+        not_teaching$reset()
+        schedule$reset()
         #shinyjs::hide("menu", asis = TRUE)
         log_info(ns = ns, "app stays locked")
       }
@@ -132,12 +155,14 @@ module_data_server <- function(input, output, session, data_sheet_id, gs_key_fil
     reload_data = reload_data,
     is_authenticated = is_authenticated,
     classes = classes,
-    paths = paths
+    instructors = instructors,
+    not_teaching = not_teaching,
+    schedule = schedule
   )
 }
 
 # data ui components - reload button ------
-module_data_reload_button <- function(id) {
+module_data_schedule_reload_button <- function(id) {
   ns <- NS(id)
   actionButton(ns("reload"), "Reload", icon = icon("rotate")) |>
     add_tooltip("Reload all data")

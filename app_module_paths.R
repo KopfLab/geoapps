@@ -138,7 +138,7 @@ module_paths_server <- function(input, output, session, data) {
 
 }
 
-# dropdown for path selection
+# load UI dynamically
 module_paths_ui <- function(id) {
   ns <- NS(id)
   uiOutput(ns("main")) |> shinycssloaders::withSpinner()

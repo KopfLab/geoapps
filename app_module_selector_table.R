@@ -96,6 +96,18 @@ module_selector_table_server <- function(
     return(df)
   })
 
+  # set the visible columns, returns TRUE/FALSE if values have changed
+  set_visible_columns <- function(visible_cols) {
+    visible_cols <- as.integer(visible_cols)
+    if (!identical(visible_cols, values$visible_cols)) {
+      # got some new columns
+      values$visible_cols <- visible_cols
+      return(TRUE)
+    }
+    return(FALSE)
+  }
+
+  # get the table with the visible cols
   get_table_df_visible_cols <- reactive({
     return(get_table_df()[values$visible_cols])
   })
@@ -210,6 +222,7 @@ module_selector_table_server <- function(
   # save row selection ========
   observeEvent(input$selection_table_rows_selected, {
     req(has_data())
+    req(values$all_ids)
     select_rows(indices = input$selection_table_rows_selected)
   }, ignoreNULL = FALSE)
 
@@ -244,7 +257,7 @@ module_selector_table_server <- function(
   # save cell selection ========
   observeEvent(input$selection_table_cells_selected, {
     req(has_data())
-    #select_rows(indices = input$selection_table_rows_selected)
+    req(values$all_ids)
     if (!is.null(input$selection_table_cells_selected) && dim(input$selection_table_cells_selected)[2] > 1) {
       select_cells(
         indices = input$selection_table_cells_selected[,1],
@@ -260,7 +273,6 @@ module_selector_table_server <- function(
   }
 
   select_cells <- function(ids = get_id_from_index(indices), indices = NULL, cols = get_col_from_index(col_indices), col_indices = NULL) {
-
     # get selected ids and cols
     selected <-
       dplyr::tibble(id = ids, col = cols) |>
@@ -306,7 +318,7 @@ module_selector_table_server <- function(
     update_selected()
   })
 
-  # pick columns event =====
+  # set/pick columns event =====
   observeEvent(input$pick_cols, {
     req(get_data())
     dlg <- modalDialog(
@@ -328,10 +340,7 @@ module_selector_table_server <- function(
     showModal(dlg)
   })
   observeEvent(input$apply_cols, {
-    visible_cols <- as.integer(input$visible_cols)
-    if (!identical(visible_cols, values$visible_cols)) {
-      # got some new columns
-      values$visible_cols <- visible_cols
+    if (set_visible_columns(input$visible_cols)) {
       log_info(
         ns = ns, "selecting table columns: ",
         sprintf(

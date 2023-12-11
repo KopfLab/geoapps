@@ -51,12 +51,12 @@ module_data_table_server <- function(
       data
     },
     warning = function(w) {
-      log_error(ns = ns, "data reading failed", user_msg = "Data warning", error = w)
+      log_error(ns = ns, "data reading failed", user_msg = sprintf("Data warning in table '%s'", sheet), error = w)
       report_error()
       NULL
     },
     error = function(e) {
-      log_error(ns = ns, "data reading failed", user_msg = "Missing data", error = e)
+      log_error(ns = ns, "data reading failed", user_msg = sprintf("Missing data in table '%s'", sheet), error = e)
       report_error()
       NULL
     })
