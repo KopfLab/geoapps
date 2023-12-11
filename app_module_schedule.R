@@ -4,6 +4,9 @@ module_schedule_server <- function(input, output, session, data) {
   # namespace
   ns <- session$ns
 
+  # constants
+  data_err_prefix <- "Encountered database issue, the app may not function properly: "
+
   # data functions ===========
 
   # available terms
@@ -17,7 +20,13 @@ module_schedule_server <- function(input, output, session, data) {
     req(get_terms())
     req(input$first_term)
     req(input$last_term)
-    get_terms() |> filter_terms(input$first_term, input$last_term)
+    terms <- get_terms() |> filter_terms(input$first_term, input$last_term)
+
+    # include summers?
+    if (!"Summers" %in% input$show_options) {
+      terms <- terms |> drop_summers()
+    }
+    return(terms)
   })
 
   # classes
@@ -46,13 +55,21 @@ module_schedule_server <- function(input, output, session, data) {
     req(data$not_teaching$get_data())
     req(get_instructors())
     not_teaching <- data$not_teaching$get_data()
-    if (nrow(missing <- not_teaching |> dplyr::anti_join(get_instructors(), by = "instructor_id")) > 0)
-      sprintf("missing instructor_id in 'not_teaching': %s", paste(unique(missing$instructor_id), collapse = ", ")) |>
-      log_error(ns = ns)
-    if (nrow(wrong <- not_teaching |> dplyr::filter(!stringr::str_detect(.data$term, "(Spring|Summer|Fall) \\d{4}"))) > 0)
-      sprintf("incorrect term formatting in 'not_teaching': %s", paste(unique(wrong$term), collapse = ", ")) |>
-      log_error(ns = ns)
+    if (nrow(missing <- not_teaching |> dplyr::anti_join(get_instructors(), by = "instructor_id")) > 0) {
+      msg <- sprintf("missing instructor_id in 'not_teaching': %s", paste(unique(missing$instructor_id), collapse = ", "))
+      log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
+    }
+    if (nrow(wrong <- not_teaching |> dplyr::filter(!stringr::str_detect(.data$term, get_term_regexp()))) > 0) {
+      msg <- sprintf("incorrect term formatting in 'not_teaching': %s", paste(unique(wrong$term), collapse = ", "))
+      log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
+    }
     not_teaching
+  })
+
+  # reasons
+  get_reasons <- reactive({
+    req(get_not_teaching())
+    get_not_teaching()$reason |> unique() |> na.omit()
   })
 
   # schedule
@@ -69,17 +86,21 @@ module_schedule_server <- function(input, output, session, data) {
         canceled = !is.na(.data$canceled) & .data$canceled,
         deleted = !is.na(.data$deleted) & .data$deleted
       )
-    if (nrow(missing <- schedule |> dplyr::anti_join(get_instructors(), by = "instructor_id")) > 0)
-      sprintf("missing instructor_id in 'schedule': %s", paste(unique(missing$instructor_id), collapse = ", ")) |>
-      log_error(ns = ns)
 
-    if (nrow(missing <- schedule |> dplyr::anti_join(get_classes(), by = "class")) > 0)
-      sprintf("missing class in 'classes': %s", paste(unique(missing$class), collapse = ", ")) |>
-      log_error(ns = ns)
+    if (nrow(missing <- schedule |> dplyr::anti_join(get_instructors(), by = "instructor_id")) > 0) {
+      msg <- sprintf("missing instructor_id in 'schedule': %s", paste(unique(missing$instructor_id), collapse = ", "))
+      log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
+    }
 
-    if (nrow(wrong <- schedule |> dplyr::filter(!stringr::str_detect(.data$term, "(Spring|Summer|Fall) \\d{4}"))) > 0)
-      sprintf("incorrect term formatting in 'schedule': %s", paste(unique(wrong$term), collapse = ", ")) |>
-      log_error(ns = ns)
+    if (nrow(missing <- schedule |> dplyr::anti_join(get_classes(), by = "class")) > 0) {
+      msg <- sprintf("missing class in 'classes': %s", paste(unique(missing$class), collapse = ", "))
+      log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
+    }
+
+    if (nrow(wrong <- schedule |> dplyr::filter(!stringr::str_detect(.data$term, get_term_regexp()))) > 0) {
+      msg <- sprintf("incorrect term formatting in 'schedule': %s", paste(unique(wrong$term), collapse = ", "))
+      log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
+    }
 
     # schedule with unique ID (for editing purposes)
     schedule |>
@@ -89,6 +110,7 @@ module_schedule_server <- function(input, output, session, data) {
       )
   })
 
+  # schedule for data table
   get_schedule_for_table <- reactive({
     req(get_schedule())
     req(get_not_teaching())
@@ -96,16 +118,28 @@ module_schedule_server <- function(input, output, session, data) {
     req(get_classes())
     req(get_selected_terms())
 
+    # FIXME: do something with this
     print(input$show_options)
 
+    # always reset visible columns to load new selection
+    schedule$reset_visible_columns()
+
+    # combine schedule information
     combine_schedule(
       schedule = get_schedule(),
       not_teaching = get_not_teaching(),
       instructors = get_instructors(),
       classes = get_classes(),
-      selected_terms = get_selected_terms()
+      available_terms = get_terms(),
+      selected_terms = get_selected_terms(),
+      recognized_reasons = get_reasons()
     ) |>
-      dplyr::select(-"class", -"subtitle", -"instructor_id", -"title", -"credits", -"inactive")
+      # select columns here to get proper order (instead of later, since the cols are dynamic depending on terms)
+      dplyr::select(full_title, Instructor = instructor, dplyr::matches(get_term_regexp())) |>
+      # escape html characters for safety and then create \n as <br>
+      dplyr::mutate(dplyr::across(dplyr::where(is.character), function(x) {
+        x |> htmltools::htmlEscape() |> stringr::str_replace_all("\\n", "<br>")
+      }))
   })
 
   # generate UI =====================
@@ -118,18 +152,18 @@ module_schedule_server <- function(input, output, session, data) {
       h2("Terms"),
       selectInput(
         ns("first_term"), "Select first term to display:",
-        choices = c("Select first term" = "", as.character(get_terms())),
+        choices = c("Select first term" = "", as.character(get_terms() |> drop_summers())),
         selected = find_term(get_terms(), years_shift = -2)
       ),
       selectInput(
         ns("last_term"), "Select last term to display:",
-        choices = c("Select first term" = "", as.character(get_terms())),
+        choices = c("Select first term" = "", as.character(get_terms() |> drop_summers())),
         selected = find_term(get_terms(), years_shift = +2)
       ),
-      radioButtons(
+      checkboxGroupInput(
         ns("show_options"), "Select information to display:",
-        choices = c("Section #", "Day/Time", "Location", "Enrollment"),
-        selected = "Day/Time"
+        choices = c("Summers", "Section #", "Day/Time", "Location", "Enrollment"),
+        selected = "Day/Time", inline = TRUE
       ),
       div(id = ns("schedule_box"),
           shinydashboard::box(
@@ -169,7 +203,7 @@ module_schedule_server <- function(input, output, session, data) {
         shinyjs::show("schedule_box")
       }
     },
-    ignoreNULL = FALSE
+    ignoreNULL = FALSE, priority = 100
   )
 
   # schedule table ======
@@ -180,70 +214,39 @@ module_schedule_server <- function(input, output, session, data) {
     get_data = get_schedule_for_table,
     id_column = "id",
     # row grouping
-    render_html = "full_title",
+    render_html = dplyr::everything(),
     extensions = c("RowGroup", "FixedHeader"),
     rowGroup = list(dataSrc = 0),
     columnDefs = list(
-      # don't show row group column
-      list(visible = FALSE, targets = 0),
-      # render newlines correctly
-      list(
-        render = JS("function(data){return data.replace(/\\n/g, '<br>');}"),
-        targets = c(1:10)
-      )
+      list(visible = FALSE, targets = 0)
     ),
     # view all & scrolling
     allow_view_all = TRUE,
     initial_page_length = -1,
     dom = "ft",
     scrollX = TRUE,
-    fixedHeader = TRUE
+    fixedHeader = TRUE,
+    # don't escape (since we made the columns safe and replaced \n wit <br>)
+    escape = FALSE
   )
 
-
-  # classes <- callModule(
-  #   module_selector_table_server,
-  #   "classes",
-  #   get_data = get_classes,
-  #   id_column = "id",
-  #   available_columns = list(
-  #     Category =
-  #       ifelse(
-  #         !is.na(category_description),
-  #         sprintf("%s<br/><i>%s</i>",
-  #                 htmltools::htmlEscape(category_info),
-  #                 htmltools::htmlEscape(category_description)),
-  #         htmltools::htmlEscape(category_info)
-  #       ),
-  #     Class = sprintf("%s(%s)", class, credits),
-  #     Title = title,
-  #     `Relevance for this path` = reason,
-  #     `Spring 2023`, `Fall 2023`, `Spring 2024`, `Fall 2024`
-  #   ),
-  #   allow_view_all = TRUE,
-  #   initial_page_length = -1,
-  #   dom = "ft",
-  #   selection = "multiple",
-  #   # row grouping
-  #   render_html = "Category",
-  #   extensions = c("RowGroup", "FixedHeader"),
-  #   rowGroup = list(dataSrc = 0),
-  #   columnDefs = list(list(visible = FALSE, targets = 0)),
-  #   # scrolling
-  #   scrollX = TRUE,
-  #   fixedHeader = TRUE,
-  #   # formatting
-  #   formatting_calls = list(
-  #     list(
-  #       func = DT::formatStyle, columns = c("Spring 2023", "Fall 2023", "Spring 2024", "Fall 2024"),
-  #       backgroundColor = DT::styleEqual(
-  #         get_classes_teaching_info_placeholder() |> names(),
-  #         get_classes_teaching_info_placeholder() |> as.character()
-  #       )
-  #     )
-  #   )
-  # )
-  #
+  # formatting the schedule for easy visibility
+  observeEvent(get_reasons(), {
+    log_debug(ns = ns, "update formatting with reasons")
+    schedule$change_formatting_calls(
+      list(
+        list(
+          func = DT::formatStyle,
+          columns_expr = expr(dplyr::matches(get_term_regexp())),
+          backgroundColor = DT::styleEqual(
+            levels = c("?", "no", get_reasons()),
+            values = c("lightgray", "lightpink", rep("lightyellow", length(get_reasons()))),
+            default = "lightgreen"
+          )
+        )
+      )
+    )
+  }, priority = 99)
 
 }
 

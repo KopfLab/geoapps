@@ -12,8 +12,8 @@
 #' @param filter whether to include column filters - note that this does NOT work for restoring after reload so use with caution if that's a desired feature
 #' @param class styling of table see class parameter for datatable
 #' @param selection see parameter for data table (none, single, multiple)
-#' @param render_html list of columns which should NOT be html escaped (e.g. for links)
-#' @param formatting_calls list of lists with function e.g. list(list(func = formatCurrency, columns = "x))
+#' @param render_html list of columns which should NOT be html escaped (e.g. for links), use dplyr::everything() to render everything
+#' @param formatting_calls list of lists with function and columns e.g. list(list(func = formatCurrency, columns = "x)) or a columns expressione.g. list(list(func = formatCurrencty, columns_expr = rlang::expr(matches("abc"))))
 module_selector_table_server <- function(
     input, output, session, get_data,
     id_column,
@@ -54,7 +54,8 @@ module_selector_table_server <- function(
     display_start = 0, # which display page to start on
     search = "", # search term
     order = list(), # ordering information
-    filter = match.arg(filter) # filter setting
+    filter = match.arg(filter), # filter setting
+    formatting_calls = formatting_calls # formatting calls
   )
 
   # create table df =============
@@ -79,10 +80,10 @@ module_selector_table_server <- function(
           rownames(df) <- values$all_ids
 
           # select the transmuted cols to begin with
-          isolate({
-            if (length(values$visible_cols) == 0)
-              values$visible_cols <- seq_along(names(df))
-          })
+          if (length(values$visible_cols) == 0) {
+            values$visible_cols <- seq_along(names(df))
+            log_debug(ns = ns, "no visible columns selected, select all in available columns")
+          }
 
           return(df)
         }),
@@ -107,12 +108,21 @@ module_selector_table_server <- function(
     return(FALSE)
   }
 
+  # reset visible columns (always isolate, trigger independently!)
+  reset_visible_columns <- function() {
+    isolate({
+      if (length(values$visible_cols) > 0)
+        values$visible_cols <- c()
+    })
+  }
+
   # get the table with the visible cols
   get_table_df_visible_cols <- reactive({
     return(get_table_df()[values$visible_cols])
   })
 
   # render data table ========
+  render_html_expr <- rlang::enexpr(render_html)
   output$selection_table <- DT::renderDataTable({
     # triggers
     get_table_df_visible_cols()
@@ -130,7 +140,9 @@ module_selector_table_server <- function(
             filter = values$filter,
             class = class,
             selection = selection,
-            escape = setdiff(names(get_table_df_visible_cols()), render_html),
+            escape =
+              if(rlang::is_call(render_html_expr) && rlang::call_name(render_html_expr) == "everything") FALSE
+              else setdiff(names(get_table_df_visible_cols()), render_html),
             editable = editable,
             extensions = extensions,
             options = list(
@@ -139,7 +151,6 @@ module_selector_table_server <- function(
               search = list(regex = FALSE, caseInsensitive = TRUE, search = values$search),
               displayStart = values$display_start,
               lengthMenu = page_lengths,
-              autoWidth = TRUE, # not actually this does anything
               searchDelay = 100,
               dom = dom,
               #columns= values$columns, # this does not work to restore the search, breaks the table instead
@@ -152,20 +163,29 @@ module_selector_table_server <- function(
           )
 
           # formatting calls
-          if (length(formatting_calls) > 0) {
-            for (i in seq_along(formatting_calls)) {
-              if(names(formatting_calls[[i]])[1] != "func")
-                abort("trying to apply formatting call without first argument being 'func'")
-              if(names(formatting_calls[[i]])[2] != "columns")
-                abort("trying to apply formatting call without second argument being 'columns'")
-              existing_cols <- intersect(formatting_calls[[i]]$columns, names(get_table_df_visible_cols()))
+          if (length(values$formatting_calls) > 0) {
+            for (i in seq_along(values$formatting_calls)) {
+              if(!"func" %in% names(values$formatting_calls[[i]]))
+                abort("trying to apply formatting call without 'func' variable")
+              if(!any(c("columns", "columns_expr") %in% names(values$formatting_calls[[i]])))
+                abort("trying to apply formatting call without either 'columns' or 'columns_expr' argument")
+
+              # columns
+              existing_cols <-
+                if ("columns_expr" %in% names(values$formatting_calls[[i]])) {
+                  tidyselect::eval_select(values$formatting_calls[[i]]$columns_expr, get_table_df_visible_cols(), strict = FALSE)
+                } else {
+                  intersect(values$formatting_calls[[i]]$columns, names(get_table_df_visible_cols()))
+                }
+
+              # apply
               if (length(existing_cols) > 0) {
                 # run the renderer
                 table <- do.call(
-                  formatting_calls[[i]]$func,
+                  values$formatting_calls[[i]]$func,
                   args = c(
                     list(table = table, columns = existing_cols),
-                    formatting_calls[[i]][-c(1:2)]
+                    values$formatting_calls[[i]][-which(names(values$formatting_calls[[i]]) %in% c("func", "columns", "columns_expr"))]
                   )
                 )
               }
@@ -190,6 +210,13 @@ module_selector_table_server <- function(
     # make sure this is executed server side
     server = TRUE
   )
+
+  # update data table formatting (always isolated! trigger independently)
+  change_formatting_calls <- function(formatting_calls) {
+    isolate({
+      values$formatting_calls <- formatting_calls
+    })
+  }
 
   # edit data table ========================
   proxy = DT::dataTableProxy("selection_table")
@@ -416,12 +443,15 @@ module_selector_table_server <- function(
     }
   })
 
-  # return functions
+  # return functions =====
   list(
     select_rows = select_rows,
     get_selected_ids = get_selected_ids,
     get_selected_cells = get_selected_cells,
-    get_selected_items = get_selected_items
+    get_selected_items = get_selected_items,
+    set_visible_columns = set_visible_columns,
+    reset_visible_columns = reset_visible_columns,
+    change_formatting_calls = change_formatting_calls
   )
 }
 
