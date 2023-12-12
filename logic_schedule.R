@@ -98,7 +98,7 @@ combine_schedule <- function(
           # all information
           TRUE ~ paste(
             "\n",
-            if (include_section_nr) sprintf("Section #%s", section),
+            if (include_section_nr) sprintf("Section %s", section),
             if (include_day_time) sprintf("%s %s-%s", days, start_time, end_time),
             if (include_location) sprintf("%s %s", building, room),
             if (include_enrollment) ifelse(!is.na(enrollment), sprintf("%s students", enrollment), ""),

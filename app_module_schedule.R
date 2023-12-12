@@ -7,6 +7,12 @@ module_schedule_server <- function(input, output, session, data) {
   # constants
   data_err_prefix <- "Encountered database issue, the app may not function properly: "
 
+  # reactive vaalues
+  values <- reactiveValues(
+    first_term = NULL,
+    last_term = NULL
+  )
+
   # data functions ===========
 
   # available terms
@@ -15,12 +21,22 @@ module_schedule_server <- function(input, output, session, data) {
     get_available_terms(first_term = data$schedule$get_data()$term[1])
   })
 
+  # monitor terms
+  observeEvent(input$first_term, {
+    if (is.null(values$first_term) || !identical(values$first_term, input$first_term))
+      values$first_term <- input$first_term
+  })
+  observeEvent(input$last_term, {
+    if (is.null(values$last_term) || !identical(values$last_term, input$last_term))
+      values$last_term <- input$last_term
+  })
+
   # selected terms
   get_selected_terms <- reactive({
     req(get_terms())
-    req(input$first_term)
-    req(input$last_term)
-    terms <- get_terms() |> filter_terms(input$first_term, input$last_term)
+    req(values$first_term)
+    req(values$last_term)
+    terms <- get_terms() |> filter_terms(values$first_term, values$last_term)
 
     # include summers?
     if (!"Summers" %in% input$show_options) {
@@ -152,17 +168,26 @@ module_schedule_server <- function(input, output, session, data) {
   output$main <- renderUI({
     req(get_terms())
     log_info("loading terms")
+    terms <- as.character(get_terms() |> drop_summers())
     tagList(
       h2("Terms"),
       selectInput(
         ns("first_term"), "Select first term to display:",
-        choices = c("Select first term" = "", as.character(get_terms() |> drop_summers())),
-        selected = find_term(get_terms(), years_shift = -2)
+        choices = c("Select first term" = "", terms),
+        selected =
+          isolate({
+            if (!is.null(values$first_term) && values$first_term %in% terms) values$first_term
+            else find_term(get_terms(), years_shift = -2)
+          })
       ),
       selectInput(
         ns("last_term"), "Select last term to display:",
-        choices = c("Select first term" = "", as.character(get_terms() |> drop_summers())),
-        selected = find_term(get_terms(), years_shift = +2)
+        choices = c("Select last term" = "", terms),
+        selected =
+          isolate({
+            if (!is.null(values$last_term) && values$last_term %in% terms) values$last_term
+            else find_term(get_terms(), years_shift = +2)
+          })
       ),
       checkboxGroupInput(
         ns("show_options"), "Select information to display:",
