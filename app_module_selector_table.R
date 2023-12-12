@@ -27,6 +27,7 @@ module_selector_table_server <- function(
     filter = c("none", "bottom", "top"),
     class = "cell-border stripe hover order-column",
     selection = c("multiple", "single", "none"),
+    enable_dblclick = FALSE,
     render_html = c(),
     formatting_calls = list(),
     editable = FALSE,
@@ -159,8 +160,27 @@ module_selector_table_server <- function(
               # disable the automatic state reload to avoid issues between different table instances
               stateLoadParams = DT::JS("function (settings, data) { return false; }"),
               ...
-            )
+            ),
+            callback =
+              if (enable_dblclick) {
+                htmlwidgets::JS(
+                  "table.on('dblclick', 'td',",
+                  "  function() {",
+                  "    var row = table.cell(this).index().row;",
+                  "    var col = table.cell(this).index().column;",
+                  sprintf("    Shiny.setInputValue('%s_dblclick', {dt_row: row, dt_col: col});", ns("selection_table")),
+                  "  }",
+                  ");"
+                )
+              } else {
+                htmlwidgets::JS("")
+              }
           )
+
+          # double click
+          observeEvent(input$selection_table_dblclick, {
+            print(input$selection_table_dblclick)
+          })
 
           # formatting calls
           if (length(values$formatting_calls) > 0) {

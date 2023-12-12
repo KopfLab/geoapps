@@ -134,9 +134,6 @@ module_schedule_server <- function(input, output, session, data) {
     req(get_classes())
     req(get_selected_terms())
 
-    # FIXME: do something with this
-    print(input$show_options)
-
     # always reset visible columns to load new selection
     schedule$reset_visible_columns()
 
@@ -256,7 +253,8 @@ module_schedule_server <- function(input, output, session, data) {
     scrollX = TRUE,
     fixedHeader = TRUE,
     # don't escape (since we made the columns safe and replaced \n wit <br>)
-    escape = FALSE
+    escape = FALSE,
+    selection = list(mode = "single", target = "cell")
   )
 
   # formatting the schedule for easy visibility
