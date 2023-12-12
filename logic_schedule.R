@@ -38,7 +38,13 @@ get_available_terms <- function(first_term, n_years_past_current = 5) {
 }
 
 # combine schedule
-combine_schedule <- function(schedule, not_teaching, instructors, classes, available_terms, selected_terms, separator = "\n", recognized_reasons = c("leave", "sabbatical")) {
+combine_schedule <- function(
+    schedule, not_teaching, instructors, classes, available_terms, selected_terms,
+    separator = "\n", recognized_reasons = c(),
+    include_section_nr = TRUE,
+    include_day_time = TRUE,
+    include_location = TRUE,
+    include_enrollment = TRUE) {
 
   # safety checks
   stopifnot(
@@ -88,9 +94,18 @@ combine_schedule <- function(schedule, not_teaching, instructors, classes, avail
         dplyr::case_when(
           .data$canceled ~ "canceled",
           .data$class == "XXXX0000" & !is.na(.data$reason) ~ .data$reason,
-          # all information (by default)
-          #TRUE ~ sprintf("%s %s-%s\n%s %s\n%s students", days, start_time, end_time, building, room, enrollment)
-          TRUE ~ sprintf("%s %s-%s", days, start_time, end_time)
+          !include_section_nr && !include_day_time && !include_location && !include_enrollment ~ "yes",
+          # all information
+          TRUE ~ paste(
+            "\n",
+            if (include_section_nr) sprintf("Section #%s", section),
+            if (include_day_time) sprintf("%s %s-%s", days, start_time, end_time),
+            if (include_location) sprintf("%s %s", building, room),
+            if (include_enrollment) ifelse(!is.na(enrollment), sprintf("%s students", enrollment), ""),
+            sep = separator
+          ) |>
+            stringr::str_replace_all("(\\n){2,}", "\n") |>
+            stringr::str_remove_all("(^\\n|\\n$)")
         )
     ) |>
     droplevels() |>

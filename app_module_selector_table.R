@@ -459,7 +459,7 @@ module_selector_table_server <- function(
 # Selector table
 module_selector_table_ui <- function(id) {
   ns <- NS(id)
-  DT::dataTableOutput(ns("selection_table"))
+  DT::dataTableOutput(ns("selection_table")) |> shinycssloaders::withSpinner()
 }
 
 # Selection buttons

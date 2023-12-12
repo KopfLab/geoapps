@@ -132,7 +132,11 @@ module_schedule_server <- function(input, output, session, data) {
       classes = get_classes(),
       available_terms = get_terms(),
       selected_terms = get_selected_terms(),
-      recognized_reasons = get_reasons()
+      recognized_reasons = get_reasons(),
+      include_section_nr = "Section #" %in% input$show_options,
+      include_day_time = "Day/Time" %in% input$show_options,
+      include_location = "Location" %in% input$show_options,
+      include_enrollment = "Enrollment" %in% input$show_options
     ) |>
       # select columns here to get proper order (instead of later, since the cols are dynamic depending on terms)
       dplyr::select(full_title, Instructor = instructor, dplyr::matches(get_term_regexp())) |>
