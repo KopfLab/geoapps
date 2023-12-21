@@ -182,25 +182,25 @@ module_schedule_server <- function(input, output, session, data) {
   output$sidebar <- renderUI({
     req(get_terms())
     log_info("loading terms")
-    terms <- as.character(get_terms() |> drop_summers())
+    terms <- get_terms() |> drop_summers()
     tagList(
       selectizeInput(
         ns("first_term"), "Select first term to display:",
         multiple = FALSE,
-        choices = c("Select first term" = "", terms),
+        choices = get_sorted_terms(terms),
         selected =
           isolate({
-            if (!is.null(values$first_term) && values$first_term %in% terms) values$first_term
+            if (!is.null(values$first_term) && values$first_term %in% as.character(terms)) values$first_term
             else "Spring 2024"#FIXME: temp solution for faculty feedback find_term(get_terms(), years_shift = -2)
           })
       ),
       selectizeInput(
         ns("last_term"), "Select last term to display:",
         multiple = FALSE,
-        choices = c("Select last term" = "", terms),
+        choices = get_sorted_terms(terms),
         selected =
           isolate({
-            if (!is.null(values$last_term) && values$last_term %in% terms) values$last_term
+            if (!is.null(values$last_term) && values$last_term %in% as.character(terms)) values$last_term
             else find_term(get_terms(), years_shift = +2)
           })
       ),

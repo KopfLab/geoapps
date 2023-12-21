@@ -18,8 +18,15 @@ find_term <- function(terms, current_term = get_current_term(), years_shift) {
   return(levels(terms)[term])
 }
 
-filter_terms <- function(terms, start_term, end_term) {
-  terms[terms >= start_term & terms <= end_term] |> droplevels()
+filter_terms <- function(terms, start_term = NULL, end_term = NULL, inclusive = TRUE) {
+  if (!is.null(start_term)) {
+    terms <- if(inclusive) terms[terms >= start_term] else terms[terms > start_term]
+  }
+
+  if (!is.null(end_term)) {
+    terms <- if(inclusive)  terms[terms <= end_term] else terms[terms < end_term]
+  }
+  return(terms |> droplevels())
 }
 
 drop_summers <- function(terms) {
@@ -35,6 +42,16 @@ get_available_terms <- function(first_term, n_years_past_current = 5) {
     forcats::fct_inorder(ordered = TRUE)
   available_terms <- filter_terms(terms, first_term, find_term(terms, current_term, n_years_past_current))
   return(available_terms)
+}
+
+# sort terms (past, current, future)
+get_sorted_terms <- function(terms) {
+  current_term <- get_current_term()
+  list(
+    Past = filter_terms(terms, end_term = current_term, inclusive = FALSE) |> as.character() |> as.list(),
+    Current = list(current_term),
+    Future = filter_terms(terms, start_term = current_term, inclusive = FALSE) |> as.character() |> as.list()
+  )
 }
 
 # schedule ========
