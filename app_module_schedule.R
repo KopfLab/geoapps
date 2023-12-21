@@ -115,6 +115,11 @@ module_schedule_server <- function(input, output, session, data) {
                                instructor_id, "none")
       )
 
+    # filter out canceled classes
+    if (!"Canceled" %in% input$show_options) {
+      schedule <- schedule |> dplyr::filter(!.data$canceled)
+    }
+
     if (nrow(missing <- schedule |> dplyr::anti_join(get_instructors(), by = "instructor_id")) > 0) {
       msg <- sprintf("unrecognized `instructor_id` in `schedule`: '%s'", paste(unique(missing$instructor_id), collapse = "', '"))
       log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
@@ -199,7 +204,7 @@ module_schedule_server <- function(input, output, session, data) {
       ),
       checkboxGroupInput(
         ns("show_options"), "Select information to display:",
-        choices = c("Summers", "Section #", "Day/Time", "Location", "Enrollment"),
+        choices = c("Summers", "Canceled", "Section #", "Day/Time", "Location", "Enrollment"),
         selected = c("Day/Time", "Location", "Enrollment")
         #, inline = TRUE
       )
