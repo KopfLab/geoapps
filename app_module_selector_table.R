@@ -10,6 +10,7 @@
 #' @param initial_page_length initially selected page length, first entry of the page_lengths by default
 #' @param dom the available table control elements and their order
 #' @param filter whether to include column filters - note that this does NOT work for restoring after reload so use with caution if that's a desired feature
+#' @param ordering whether to allow column sorting, default TRUE
 #' @param class styling of table see class parameter for datatable
 #' @param selection see parameter for data table (none, single, multiple)
 #' @param render_html list of columns which should NOT be html escaped (e.g. for links), use dplyr::everything() to render everything
@@ -25,6 +26,7 @@ module_selector_table_server <- function(
     initial_page_length = page_lengths[[1]][1],
     dom = "fltip",
     filter = c("none", "bottom", "top"),
+    ordering = TRUE,
     class = "cell-border stripe hover order-column",
     selection = c("multiple", "single", "none"),
     enable_dblclick = FALSE,
@@ -148,6 +150,7 @@ module_selector_table_server <- function(
             extensions = extensions,
             options = list(
               order = values$order,
+              ordering = ordering,
               pageLength = values$page_length,
               search = list(regex = FALSE, caseInsensitive = TRUE, search = values$search),
               displayStart = values$display_start,

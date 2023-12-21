@@ -262,6 +262,7 @@ module_schedule_server <- function(input, output, session, data) {
     allow_view_all = TRUE,
     initial_page_length = -1,
     dom = "ft",
+    ordering = FALSE,
     scrollX = TRUE,
     fixedHeader = TRUE,
     # don't escape (since we made the columns safe and replaced \n wit <br>)
