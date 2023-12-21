@@ -37,6 +37,73 @@ get_available_terms <- function(first_term, n_years_past_current = 5) {
   return(available_terms)
 }
 
+# schedule ========
+
+# quick check for practical nonempty strings
+string_not_empty <- function(s) {
+  return(!is.na(s) & !stringr::str_detect(s, "^[\\s\\r\\n]*$"))
+}
+# helper to replace non empty strings with default
+string_not_empty_or_default <- function(s, default = "?") {
+  ifelse(string_not_empty(s), s, default)
+}
+
+# combine information
+combine_information <- function(
+    section, days, start_time, end_time, building, room, enrollment, enrollment_cap,
+    include_section_nr, include_day_time, include_location, include_enrollment) {
+
+  if (length(section) == 0) return(character(0))
+
+  # start empty
+  section_info <- day_time_info <- location_info <- enrollment_info <- rep("", length(section))
+
+  # section info
+  if (include_section_nr) {
+    section_info <- sprintf("#%s", string_not_empty_or_default(section, "?"))
+    if (include_day_time || include_location || include_enrollment)
+      section_info <- paste0(section_info, ": ")
+  }
+
+  # day time info
+  if (include_day_time) {
+    day_time_info <-
+      dplyr::case_when(
+        string_not_empty(days) & string_not_empty(start_time) & string_not_empty(end_time) ~
+          sprintf("%s %s-%s", days, start_time, end_time),
+        string_not_empty(days) & !string_not_empty(start_time) & !string_not_empty(end_time) ~
+          sprintf("%s ?", days),
+        !string_not_empty(days) & !string_not_empty(start_time) & !string_not_empty(end_time) ~
+          "?",
+        TRUE ~ sprintf(
+          "%s %s-%s", string_not_empty_or_default(days, "?"),
+          string_not_empty_or_default(start_time, "?"), string_not_empty_or_default(end_time, "?"))
+      )
+  }
+
+  # location info
+  if (include_location) {
+    location_info <- sprintf(
+      "in %s%s", string_not_empty_or_default(building, "?"),
+      string_not_empty_or_default(room, "?"))
+    if (include_day_time) location_info <- paste0(" ", location_info)
+  }
+
+  # enrollment info
+  if (include_enrollment) {
+    enrollment_info <-
+      dplyr::case_when(
+        string_not_empty(enrollment) & string_not_empty(enrollment_cap) ~
+          sprintf("%s / %s students", enrollment, enrollment_cap),
+        string_not_empty(enrollment) ~ sprintf("%s students", enrollment),
+        string_not_empty(enrollment_cap) ~ sprintf("max %s students", enrollment_cap),
+        TRUE ~ "?"
+      )
+    if (include_day_time || include_location) enrollment_info <- paste0(", ", enrollment_info)
+  }
+  paste0(section_info, day_time_info, location_info, enrollment_info)
+}
+
 # combine schedule
 combine_schedule <- function(
     schedule, not_teaching, instructors, classes, available_terms, selected_terms,
@@ -77,7 +144,11 @@ combine_schedule <- function(
       schedule |> dplyr::filter(!.data$deleted),
       # not teaching
       not_teaching |> dplyr::mutate(class = "XXXX0000"),
-      # future classes
+      # inactive
+      instructors |> dplyr::filter(.data$inactive) |>
+        tidyr::crossing(term = !!selected_terms) |>
+        dplyr::mutate(class = "XXXX0000"),
+      # future classes placeholder
       dplyr::tibble(
         term = as.character(!!selected_terms),
         class = "XXXX9999",
@@ -95,17 +166,9 @@ combine_schedule <- function(
           .data$canceled ~ "canceled",
           .data$class == "XXXX0000" & !is.na(.data$reason) ~ .data$reason,
           !include_section_nr && !include_day_time && !include_location && !include_enrollment ~ "yes",
-          # all information
-          TRUE ~ paste(
-            "\n",
-            if (include_section_nr) sprintf("Section %s", section),
-            if (include_day_time) sprintf("%s %s-%s", days, start_time, end_time),
-            if (include_location) sprintf("%s %s", building, room),
-            if (include_enrollment) ifelse(!is.na(enrollment), sprintf("%s students", enrollment), ""),
-            sep = separator
-          ) |>
-            stringr::str_replace_all("(\\n){2,}", "\n") |>
-            stringr::str_remove_all("(^\\n|\\n$)")
+          TRUE ~ combine_information(
+            .data$section, .data$days, .data$start_time, .data$end_time, .data$building, .data$room, .data$enrollment, .data$enrollment_cap,
+            include_section_nr, include_day_time, include_location, include_enrollment)
         )
     ) |>
     droplevels() |>
@@ -141,7 +204,7 @@ combine_schedule <- function(
         dplyr::mutate(instructor = forcats::as_factor(instructor) |>
                         # move these levels to the end
                         # FIXME: these are hard-coded at the moment
-                        forcats::fct_relevel("Other Instructor", "Postdoctoral Scholar", "Graduate Student", after = Inf)) |>
+                        forcats::fct_relevel("Other Instructor", "Postdoctoral Scholar", "Graduate Student", "Noone Assigned", after = Inf)) |>
         dplyr::select("instructor_id", "instructor"),
       by = "instructor_id"
     ) |>
@@ -157,7 +220,7 @@ combine_schedule <- function(
         paste0(ifelse(inactive, " (inactive)", ""))
     ) |>
     # select which columns
-    dplyr::select(class, full_title, instructor, dplyr::everything()) |>
+    dplyr::select("class", "full_title", "instructor", !!!levels(selected_terms)) |>
     # arrange
     dplyr::arrange(.data$class, .data$full_title, .data$instructor)
 

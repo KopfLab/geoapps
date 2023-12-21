@@ -54,6 +54,7 @@ module_schedule_server <- function(input, output, session, data) {
       # future classes placeholder
       dplyr::bind_rows(dplyr::tibble(class = "XXXX9999", title = "future classes placeholder")) |>
       dplyr::mutate(
+        class = stringr::str_remove_all(.data$class, "[ \\r\\n]"),
         inactive = !is.na(.data$inactive) & .data$inactive,
         class = forcats::as_factor(.data$class)
       )
@@ -63,7 +64,10 @@ module_schedule_server <- function(input, output, session, data) {
   get_instructors <- reactive({
     req(data$instructors$get_data())
     data$instructors$get_data() |>
-      dplyr::mutate(inactive = !is.na(.data$inactive) & .data$inactive)
+      dplyr::mutate(
+        instructor_id = stringr::str_remove_all(.data$instructor_id, "[ \\r\\n]"),
+        inactive = !is.na(.data$inactive) & .data$inactive
+      )
   })
 
   # not teaching
@@ -98,23 +102,31 @@ module_schedule_server <- function(input, output, session, data) {
 
     # safety checks
     schedule <- data$schedule$get_data() |>
+      # note that this is an experimental function in tidyr
+      tidyr::separate_longer_delim("instructor_id", delim = ",") |>
       dplyr::mutate(
+        class = stringr::str_remove_all(class, "[ \\r\\n]"),
+        instructor_id = stringr::str_remove_all(instructor_id, "[ \\r\\n]"),
         canceled = !is.na(.data$canceled) & .data$canceled,
         deleted = !is.na(.data$deleted) & .data$deleted
+      ) |>
+      dplyr::mutate(
+        instructor_id = ifelse(!is.na(instructor_id) & nchar(instructor_id) > 0,
+                               instructor_id, "none")
       )
 
     if (nrow(missing <- schedule |> dplyr::anti_join(get_instructors(), by = "instructor_id")) > 0) {
-      msg <- sprintf("missing instructor_id in 'schedule': %s", paste(unique(missing$instructor_id), collapse = ", "))
+      msg <- sprintf("unrecognized `instructor_id` in `schedule`: '%s'", paste(unique(missing$instructor_id), collapse = "', '"))
       log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
     }
 
     if (nrow(missing <- schedule |> dplyr::anti_join(get_classes(), by = "class")) > 0) {
-      msg <- sprintf("missing class in 'classes': %s", paste(unique(missing$class), collapse = ", "))
+      msg <- sprintf("unrecognized `class` in `classes`: '%s'", paste(unique(missing$class), collapse = "', '"))
       log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
     }
 
     if (nrow(wrong <- schedule |> dplyr::filter(!stringr::str_detect(.data$term, get_term_regexp()))) > 0) {
-      msg <- sprintf("incorrect term formatting in 'schedule': %s", paste(unique(wrong$term), collapse = ", "))
+      msg <- sprintf("incorrect term formatting in `schedule`: %s", paste(unique(wrong$term), collapse = ", "))
       log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
     }
 
@@ -174,7 +186,7 @@ module_schedule_server <- function(input, output, session, data) {
         selected =
           isolate({
             if (!is.null(values$first_term) && values$first_term %in% terms) values$first_term
-            else find_term(get_terms(), years_shift = -2)
+            else "Spring 2024"#FIXME: temp solution for faculty feedback find_term(get_terms(), years_shift = -2)
           })
       ),
       selectInput(
@@ -189,7 +201,7 @@ module_schedule_server <- function(input, output, session, data) {
       checkboxGroupInput(
         ns("show_options"), "Select information to display:",
         choices = c("Summers", "Section #", "Day/Time", "Location", "Enrollment"),
-        selected = "Day/Time", inline = TRUE
+        selected = c("Day/Time", "Location", "Enrollment"), inline = TRUE
       ),
       div(id = ns("schedule_box"),
           shinydashboard::box(
@@ -266,8 +278,8 @@ module_schedule_server <- function(input, output, session, data) {
           func = DT::formatStyle,
           columns_expr = expr(dplyr::matches(get_term_regexp())),
           backgroundColor = DT::styleEqual(
-            levels = c("?", "no", get_reasons()),
-            values = c("lightgray", "lightpink", rep("lightyellow", length(get_reasons()))),
+            levels = c("?", "no", "canceled", get_reasons()),
+            values = c("lightgray", "lightpink", "lightpink", rep("lightyellow", length(get_reasons()))),
             default = "lightgreen"
           )
         )
