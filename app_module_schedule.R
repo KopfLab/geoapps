@@ -184,8 +184,9 @@ module_schedule_server <- function(input, output, session, data) {
     log_info("loading terms")
     terms <- as.character(get_terms() |> drop_summers())
     tagList(
-      selectInput(
+      selectizeInput(
         ns("first_term"), "Select first term to display:",
+        multiple = FALSE,
         choices = c("Select first term" = "", terms),
         selected =
           isolate({
@@ -193,8 +194,9 @@ module_schedule_server <- function(input, output, session, data) {
             else "Spring 2024"#FIXME: temp solution for faculty feedback find_term(get_terms(), years_shift = -2)
           })
       ),
-      selectInput(
+      selectizeInput(
         ns("last_term"), "Select last term to display:",
+        multiple = FALSE,
         choices = c("Select last term" = "", terms),
         selected =
           isolate({
