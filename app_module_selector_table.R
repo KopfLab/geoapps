@@ -143,6 +143,7 @@ module_selector_table_server <- function(
             filter = values$filter,
             class = class,
             selection = selection,
+            #fillContainer = TRUE, # note this is useless inside DT:renderDataTable (but also not necessary, use scrollY = "calc(100vh - 200px)" instead)
             escape =
               if(rlang::is_call(render_html_expr) && rlang::call_name(render_html_expr) == "everything") FALSE
               else setdiff(names(get_table_df_visible_cols()), render_html),

@@ -173,13 +173,12 @@ module_schedule_server <- function(input, output, session, data) {
 
   # generate UI =====================
 
-  # main GUI
-  output$main <- renderUI({
+  # sidebar GUI
+  output$sidebar <- renderUI({
     req(get_terms())
     log_info("loading terms")
     terms <- as.character(get_terms() |> drop_summers())
     tagList(
-      h2("Terms"),
       selectInput(
         ns("first_term"), "Select first term to display:",
         choices = c("Select first term" = "", terms),
@@ -201,24 +200,30 @@ module_schedule_server <- function(input, output, session, data) {
       checkboxGroupInput(
         ns("show_options"), "Select information to display:",
         choices = c("Summers", "Section #", "Day/Time", "Location", "Enrollment"),
-        selected = c("Day/Time", "Location", "Enrollment"), inline = TRUE
-      ),
-      div(id = ns("schedule_box"),
-          shinydashboard::box(
-            title =
-              span(
-                "Schedule",
-                # div(
-                #   style = "position: absolute; right: 10px; top: 5px;",
-                #   module_selector_table_deselect_all_button(ns("classes"), border = FALSE),
-                #   actionButton(ns("check"), "Check", icon = icon("check"), style = "border: 0;") |>
-                #     add_tooltip("Check selected classes for fulfillment of degree requirementes (degree audit)."),
-                # )
-              ), width = 12,
-            status = "info", solidHeader = TRUE,
-            module_selector_table_ui(ns("schedule"))
-          )
-      ) |> shinyjs::hidden()
+        selected = c("Day/Time", "Location", "Enrollment")
+        #, inline = TRUE
+      )
+    )
+  })
+
+  # main GUI
+  output$main <- renderUI({
+    tagList(
+      shinydashboard::box(
+        title =
+          span(
+            "Schedule",
+            # div(
+            #   style = "position: absolute; right: 10px; top: 5px;",
+            #   module_selector_table_deselect_all_button(ns("classes"), border = FALSE),
+            #   actionButton(ns("check"), "Check", icon = icon("check"), style = "border: 0;") |>
+            #     add_tooltip("Check selected classes for fulfillment of degree requirements (degree audit)."),
+            # )
+          ), width = 12,
+        status = "info", solidHeader = TRUE,
+        module_selector_table_ui(ns("schedule")),
+        footer = tagList("Use the search bar in the upper right to filter the schedule (e.g. by instructor name, course number, etc.). Use the scrollbar to scroll through all results.")
+      )
     )
   })
 
@@ -253,7 +258,7 @@ module_schedule_server <- function(input, output, session, data) {
     id_column = "id",
     # row grouping
     render_html = dplyr::everything(),
-    extensions = c("RowGroup", "FixedHeader"),
+    extensions = "RowGroup",
     rowGroup = list(dataSrc = 0),
     columnDefs = list(
       list(visible = FALSE, targets = 0)
@@ -264,8 +269,8 @@ module_schedule_server <- function(input, output, session, data) {
     dom = "ft",
     ordering = FALSE,
     scrollX = TRUE,
-    fixedHeader = TRUE,
-    # don't escape (since we made the columns safe and replaced \n wit <br>)
+    scrollY = "calc(100vh - 260px)", # account for size of header with the -x px
+    # don't escape (since we made the columns safe and replaced \n with <br>)
     escape = FALSE,
     selection = list(mode = "single", target = "cell")
   )
@@ -292,6 +297,11 @@ module_schedule_server <- function(input, output, session, data) {
 
 
 # load UI dynamically
+module_schedule_sidebar <- function(id) {
+  ns <- NS(id)
+  uiOutput(ns("sidebar"))
+}
+
 module_schedule_ui <- function(id) {
   ns <- NS(id)
   uiOutput(ns("main")) |> shinycssloaders::withSpinner()

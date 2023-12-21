@@ -72,7 +72,7 @@ schedule_ui <- function() {
   # sidebar
   sidebar <-
     shinydashboard::dashboardSidebar(
-      collapsed = TRUE, disable = TRUE,
+      collapsed = FALSE, disable = FALSE, width = app_title_width,
       shinyjs::useShinyjs(), # enable shinyjs
       shinytoastr::useToastr(), # enable toaster
       prompter::use_prompt(), # enable prompter
@@ -88,12 +88,13 @@ schedule_ui <- function() {
             sprintf(".box.box-solid.box-info{border:1px solid %s;}", app_box_default),
             sep="\n"))
         )
-      )
+      ),
+      module_data_schedule_reload_button("schedule_data"),
+      module_schedule_sidebar("schedule")
     )
 
   # body
   body <- shinydashboard::dashboardBody(
-    module_data_schedule_reload_button("schedule_data"),
     module_schedule_ui("schedule")
   )
 
