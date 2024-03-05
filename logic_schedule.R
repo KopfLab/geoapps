@@ -1,3 +1,44 @@
+# data prep ====
+
+prepare_classes <- function(classes) {
+  classes |>
+    # not teaching placeholder
+    dplyr::bind_rows(dplyr::tibble(class = "XXXX0000", title = "not teaching placeholder")) |>
+    # future classes placeholder
+    dplyr::bind_rows(dplyr::tibble(class = "XXXX9999", title = "future classes placeholder")) |>
+    dplyr::mutate(
+      class = stringr::str_remove_all(.data$class, "[ \\r\\n]"),
+      inactive = !is.na(.data$inactive) & .data$inactive,
+      class = forcats::as_factor(.data$class)
+    )
+}
+
+prepare_instructors <- function(instructors) {
+  instructors |>
+    dplyr::mutate(
+      instructor_id = stringr::str_remove_all(.data$instructor_id, "[ \\r\\n]"),
+      inactive = !is.na(.data$inactive) & .data$inactive,
+      full_name = sprintf("%s %s", .data$first_name, .data$last_name)
+    )
+}
+
+prepare_schedule <- function(schedule) {
+  # safety checks
+  schedule |>
+    # note that this is an experimental function in tidyr
+    tidyr::separate_longer_delim("instructor_id", delim = ",") |>
+    dplyr::mutate(
+      class = stringr::str_remove_all(class, "[ \\r\\n]"),
+      instructor_id = stringr::str_remove_all(instructor_id, "[ \\r\\n]"),
+      canceled = !is.na(.data$canceled) & .data$canceled,
+      deleted = !is.na(.data$deleted) & .data$deleted
+    ) |>
+    dplyr::mutate(
+      instructor_id = ifelse(!is.na(.data$instructor_id) & nchar(.data$instructor_id) > 0,
+                             .data$instructor_id, "none")
+    )
+}
+
 # terms =======
 
 get_term_regexp <- function() {
@@ -122,13 +163,16 @@ combine_information <- function(
 }
 
 # combine schedule
+# @param instructor_schedule if provided, lists all classes ever taught by the faculty (no matter what term) and includes other faculty that taught those classes in the listing
 combine_schedule <- function(
     schedule, not_teaching, instructors, classes, available_terms, selected_terms,
     separator = "\n", recognized_reasons = c(),
     include_section_nr = TRUE,
     include_day_time = TRUE,
     include_location = TRUE,
-    include_enrollment = TRUE) {
+    include_enrollment = TRUE,
+    instructor_schedule = NULL
+    ) {
 
   # safety checks
   stopifnot(
@@ -171,10 +215,19 @@ combine_schedule <- function(
         class = "XXXX9999",
         instructor_id = "other"
       )
-    ) |>
-    # filter for selected terms
-    dplyr::filter(.data$term %in% !!selected_terms) |>
-    # info + factorize
+    )
+
+  # filter for selected terms (or everything for the selected instructor)
+  if (!is.null(instructor_schedule)) {
+    schedule_combined <- schedule_combined |>
+      dplyr::filter(.data$term %in% !!selected_terms | .data$instructor_id == !!instructor_schedule)
+  } else {
+    schedule_combined <- schedule_combined |>
+      dplyr::filter(.data$term %in% !!selected_terms)
+  }
+
+  # info + factorize
+  schedule_combined <- schedule_combined |>
     dplyr::mutate(
       term = factor(.data$term, levels = levels(!!selected_terms)),
       class = factor(.data$class, levels = levels(classes$class)),
@@ -235,12 +288,19 @@ combine_schedule <- function(
         sprintf("%s (%.0f) - %s", class, credits, title) |>
         paste0(ifelse(!is.na(subtitle), sprintf(": %s", subtitle), "")) |>
         paste0(ifelse(inactive, " (inactive)", ""))
-    ) |>
+    )
+
+  # focus on instructor_schedule if provided
+  if (!is.null(instructor_schedule)) {
+    schedule_combined <- schedule_combined |>
+      dplyr::filter(.by = c("class", "full_title"), any(.data$instructor_id == !!instructor_schedule))
+  }
+
+  # return
+  schedule_combined |>
     # select which columns
     dplyr::select("class", "full_title", "instructor", !!!levels(selected_terms)) |>
     # arrange
     dplyr::arrange(.data$class, .data$full_title, .data$instructor)
-
-  return(schedule_combined)
 }
 

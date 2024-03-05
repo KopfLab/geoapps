@@ -10,7 +10,8 @@ module_schedule_server <- function(input, output, session, data) {
   # reactive vaalues
   values <- reactiveValues(
     first_term = NULL,
-    last_term = NULL
+    last_term = NULL,
+    instructor_id = NULL
   )
 
   # data functions ===========
@@ -31,6 +32,17 @@ module_schedule_server <- function(input, output, session, data) {
       values$last_term <- input$last_term
   })
 
+  # monitor instructor
+  observeEvent(input$instructor_id, {
+    if (is.null(values$instructor_id) || !identical(values$instructor_id, input$instructor_id)) {
+      log_debug(ns = ns, "new instructor_id selected: ", input$instructor_id)
+      if (!is.na(input$instructor_id) && input$instructor_id != "NA")
+        values$instructor_id <- input$instructor_id
+      else
+        values$instructor_id <- NULL
+    }
+  })
+
   # selected terms
   get_selected_terms <- reactive({
     req(get_terms())
@@ -48,26 +60,23 @@ module_schedule_server <- function(input, output, session, data) {
   # classes
   get_classes <- reactive({
     req(data$classes$get_data())
-    data$classes$get_data() |>
-      # not teaching placeholder
-      dplyr::bind_rows(dplyr::tibble(class = "XXXX0000", title = "not teaching placeholder")) |>
-      # future classes placeholder
-      dplyr::bind_rows(dplyr::tibble(class = "XXXX9999", title = "future classes placeholder")) |>
-      dplyr::mutate(
-        class = stringr::str_remove_all(.data$class, "[ \\r\\n]"),
-        inactive = !is.na(.data$inactive) & .data$inactive,
-        class = forcats::as_factor(.data$class)
-      )
+    prepare_classes(data$classes$get_data())
   })
 
   # instructors
   get_instructors <- reactive({
     req(data$instructors$get_data())
-    data$instructors$get_data() |>
-      dplyr::mutate(
-        instructor_id = stringr::str_remove_all(.data$instructor_id, "[ \\r\\n]"),
-        inactive = !is.na(.data$inactive) & .data$inactive
-      )
+    prepare_instructors(data$instructors$get_data())
+  })
+
+  # active geol instructors for dropdown
+  get_active_geol_instructors <- reactive({
+    req(get_instructors())
+    get_instructors() |>
+      dplyr::filter(!.data$inactive, .data$department == "GEOL") |>
+      dplyr::arrange(.data$full_name) |>
+      dplyr::select("full_name", "instructor_id") |>
+      tibble::deframe()
   })
 
   # not teaching
@@ -101,19 +110,7 @@ module_schedule_server <- function(input, output, session, data) {
     req(get_not_teaching())
 
     # safety checks
-    schedule <- data$schedule$get_data() |>
-      # note that this is an experimental function in tidyr
-      tidyr::separate_longer_delim("instructor_id", delim = ",") |>
-      dplyr::mutate(
-        class = stringr::str_remove_all(class, "[ \\r\\n]"),
-        instructor_id = stringr::str_remove_all(instructor_id, "[ \\r\\n]"),
-        canceled = !is.na(.data$canceled) & .data$canceled,
-        deleted = !is.na(.data$deleted) & .data$deleted
-      ) |>
-      dplyr::mutate(
-        instructor_id = ifelse(!is.na(instructor_id) & nchar(instructor_id) > 0,
-                               instructor_id, "none")
-      )
+    schedule <- prepare_schedule(data$schedule$get_data())
 
     # filter out canceled classes
     if (!"Canceled" %in% input$show_options) {
@@ -166,7 +163,8 @@ module_schedule_server <- function(input, output, session, data) {
       include_section_nr = "Section #" %in% input$show_options,
       include_day_time = "Day/Time" %in% input$show_options,
       include_location = "Location" %in% input$show_options,
-      include_enrollment = "Enrollment" %in% input$show_options
+      include_enrollment = "Enrollment" %in% input$show_options,
+      instructor_schedule = values$instructor_id
     ) |>
       # select columns here to get proper order (instead of later, since the cols are dynamic depending on terms)
       dplyr::select(full_title, Instructor = instructor, dplyr::matches(get_term_regexp())) |>
@@ -181,7 +179,8 @@ module_schedule_server <- function(input, output, session, data) {
   # sidebar GUI
   output$sidebar <- renderUI({
     req(get_terms())
-    log_info("loading terms")
+    req(get_active_geol_instructors())
+    log_info("generating sidebar")
     terms <- get_terms() |> drop_summers()
     tagList(
       selectizeInput(
@@ -204,6 +203,20 @@ module_schedule_server <- function(input, output, session, data) {
             else find_term(get_terms(), years_shift = +2)
           })
       ),
+      selectizeInput(
+        ns("instructor_id"), "Select instructor to schedule:",
+        multiple = FALSE,
+        choices =
+          c(
+            list("Show all" = NA_character_),
+            get_active_geol_instructors()
+          ),
+        selected =
+          isolate({
+            if (!is.null(values$instructor_id) && values$instructor_id %in% as.character(get_active_geol_instructors())) values$instructor_id
+            else NA_character_
+          })
+      ),
       checkboxGroupInput(
         ns("show_options"), "Select information to display:",
         choices = c("Summers", "Canceled", "Section #", "Day/Time", "Location", "Enrollment"),
@@ -219,7 +232,7 @@ module_schedule_server <- function(input, output, session, data) {
       shinydashboard::box(
         title =
           span(
-            "Schedule",
+            "Schedule", textOutput(ns("instructor_name"), inline = TRUE)
             # div(
             #   style = "position: absolute; right: 10px; top: 5px;",
             #   module_selector_table_deselect_all_button(ns("classes"), border = FALSE),
@@ -232,6 +245,12 @@ module_schedule_server <- function(input, output, session, data) {
         footer = tagList("Use the search bar in the upper right to filter the schedule (e.g. by instructor name, course number, etc.). Use the scrollbar to scroll through all results.")
       )
     )
+  })
+
+  output$instructor_name <- renderText({
+    if(!is.null(values$instructor_id))
+      paste("for", dplyr::filter(get_instructors(), .data$instructor_id == values$instructor_id)$full_name[1])
+    else ""
   })
 
   # check for selected terms
