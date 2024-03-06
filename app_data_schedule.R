@@ -5,6 +5,7 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
 
   # namespace
   ns <- session$ns
+  local_path <- "local_data_schedule.xlsx"
 
   # reactive values =========
   values <- reactiveValues(
@@ -12,7 +13,6 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
     file_path = NULL,
     error = FALSE
   )
-  local_path <- "local_data_schedule.xlsx"
 
   # data tables =========
   get_local_file <- reactive({ values$file_path })

@@ -8,6 +8,7 @@ module_data_table_server <- function(
 
   # namespace
   ns <- session$ns
+  local_path <- "local_data_schedule.xlsx"
 
   # reactive values =========
   values <- reactiveValues(
@@ -186,8 +187,8 @@ module_data_table_server <- function(
     if (success) {
 
       # enfore reload even for dev mode
-      if (is_dev_mode() && file.exists("local_data.xlsx"))
-        file.remove("local_data.xlsx")
+      if (is_dev_mode() && file.exists(local_path))
+        file.remove(local_path)
 
       if (!any(values$data_changed$.add)) {
         # nothing new added, just update values$data

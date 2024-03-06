@@ -22,6 +22,14 @@ prepare_instructors <- function(instructors) {
     )
 }
 
+prepare_not_teaching <- function(not_teaching) {
+  not_teaching |>
+    dplyr::filter(
+      .by = c("instructor_id", "term"),
+      dplyr::row_number() == dplyr::n()
+    )
+}
+
 prepare_schedule <- function(schedule) {
   # safety checks
   schedule |>

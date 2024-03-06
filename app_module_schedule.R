@@ -11,7 +11,8 @@ module_schedule_server <- function(input, output, session, data) {
   values <- reactiveValues(
     first_term = NULL,
     last_term = NULL,
-    instructor_id = NULL
+    instructor_id = NULL,
+    instructor = NULL
   )
 
   # data functions ===========
@@ -36,11 +37,15 @@ module_schedule_server <- function(input, output, session, data) {
   observeEvent(input$instructor_id, {
     if (is.null(values$instructor_id) || !identical(values$instructor_id, input$instructor_id)) {
       log_debug(ns = ns, "new instructor_id selected: ", input$instructor_id)
-      if (!is.na(input$instructor_id) && input$instructor_id != "NA")
+      if (!is.na(input$instructor_id) && input$instructor_id != "NA") {
         values$instructor_id <- input$instructor_id
-      else
+        values$instructor <- dplyr::filter(get_instructors(), .data$instructor_id == values$instructor_id)[1,]
+      } else {
         values$instructor_id <- NULL
+        values$instructor <- NULL
+      }
     }
+    shinyjs::toggle("add_leave", condition = is_dev_mode() || !is.null(values$instructor_id))
   })
 
   # selected terms
@@ -83,7 +88,7 @@ module_schedule_server <- function(input, output, session, data) {
   get_not_teaching <- reactive({
     req(data$not_teaching$get_data())
     req(get_instructors())
-    not_teaching <- data$not_teaching$get_data()
+    not_teaching <- prepare_not_teaching(data$not_teaching$get_data())
     if (nrow(missing <- not_teaching |> dplyr::anti_join(get_instructors(), by = "instructor_id")) > 0) {
       msg <- sprintf("missing instructor_id in 'not_teaching': %s", paste(unique(missing$instructor_id), collapse = ", "))
       log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
@@ -193,7 +198,7 @@ module_schedule_server <- function(input, output, session, data) {
         selected =
           isolate({
             if (!is.null(values$first_term) && values$first_term %in% as.character(terms)) values$first_term
-            else "Spring 2024"#FIXME: temp solution for faculty feedback find_term(get_terms(), years_shift = -2)
+            else get_current_term()
           })
       ),
       selectizeInput(
@@ -235,13 +240,14 @@ module_schedule_server <- function(input, output, session, data) {
       shinydashboard::box(
         title =
           span(
-            "Schedule", textOutput(ns("instructor_name"), inline = TRUE)
-            # div(
-            #   style = "position: absolute; right: 10px; top: 5px;",
-            #   module_selector_table_deselect_all_button(ns("classes"), border = FALSE),
-            #   actionButton(ns("check"), "Check", icon = icon("check"), style = "border: 0;") |>
-            #     add_tooltip("Check selected classes for fulfillment of degree requirements (degree audit)."),
-            # )
+            "Schedule", textOutput(ns("instructor_name"), inline = TRUE),
+            div(
+              style = "position: absolute; right: 10px; top: 5px;",
+              #module_selector_table_deselect_all_button(ns("classes"), border = FALSE),
+              actionButton(ns("add_leave"), "Add Absence", icon = icon("rainbow"), style = "border: 0;") |>
+                add_tooltip("Add information about a teaching absence (sabbatical, family leave, chair, directorship, etc.).") |>
+                shinyjs::hidden(),
+            )
           ), width = 12,
         status = "info", solidHeader = TRUE,
         module_selector_table_ui(ns("schedule")),
@@ -255,7 +261,7 @@ module_schedule_server <- function(input, output, session, data) {
 
   output$instructor_name <- renderText({
     if(!is.null(values$instructor_id))
-      paste("for", dplyr::filter(get_instructors(), .data$instructor_id == values$instructor_id)$full_name[1])
+      paste("for", values$instructor$full_name)
     else ""
   })
 
@@ -301,7 +307,7 @@ module_schedule_server <- function(input, output, session, data) {
     dom = "ft",
     ordering = FALSE,
     scrollX = TRUE,
-    scrollY = "calc(100vh - 260px)", # account for size of header with the -x px
+    scrollY = "calc(100vh - 280px)", # account for size of header with the -x px
     # don't escape (since we made the columns safe and replaced \n with <br>)
     escape = FALSE,
     selection = list(mode = "single", target = "cell")
@@ -324,6 +330,98 @@ module_schedule_server <- function(input, output, session, data) {
       )
     )
   }, priority = 99)
+
+  # add leave =========
+  add_leave_dialog_inputs <- reactive({
+    #req(values$instructor_id)
+    log_debug(ns = ns, "generating leave dialog inputs")
+    tagList(
+      if (!is.null(values$instructor_id)) {
+        h4(values$instructor$full_name)
+      } else {
+        # super user only?
+        selectizeInput(
+          ns("leave_instructor_id"), "Instructor",
+          multiple = FALSE,
+          choices = c("Select instructor" = "", get_active_geol_instructors())
+        )
+      },
+      selectizeInput(
+        ns("leave_term"), "Term",
+        multiple = FALSE,
+        choices = c("Select term" = "", get_sorted_terms(get_selected_terms()))
+      ),
+      selectizeInput(
+        ns("leave_reason"), "Type",
+        multiple = FALSE,
+        choices = c("Enter/select type of absence" = "", get_reasons()),
+        options = list(create = TRUE)
+      )
+    )
+  })
+
+  observe({
+    shinyjs::toggleState(
+      "save_leave",
+      condition = (!is.null(values$instructor_id) || nchar(input$leave_instructor_id) > 0) &&
+        nchar(input$leave_term) > 0 && nchar(input$leave_reason) > 0
+    )
+  })
+
+  observeEvent(input$add_leave, {
+    data$not_teaching$start_add()
+    # modal dialog
+    dlg <- modalDialog(
+      size = "s",
+      title = "Adding Teaching Absence",
+      add_leave_dialog_inputs(),
+      footer = tagList(
+        actionButton(ns("save_leave"), "Add") |> shinyjs::disabled(),
+        modalButton("Cancel")
+      )
+    )
+    showModal(dlg)
+  })
+
+  # leave save =====
+  observeEvent(input$save_leave, {
+    # disable inputs while saving
+    c("leave_instructor_id", "leave_term_id", "leave_reason", "save") |>
+      purrr::walk(shinyjs::disable)
+
+    # values
+    values <- list(
+      term = input$leave_term,
+      instructor_id =
+        if(!is.null(values$instructor_id)) values$instructor_id
+        else input$leave_instructor_id,
+      reason = input$leave_reason
+    )
+
+    # update data
+    data$not_teaching$update(.list = values)
+
+    # commit
+    if (data$not_teaching$commit()) removeModal()
+  })
+
+
+  # add/edit dialog ========
+  # add_edit_dialog_inputs <- reactive({
+  #   req(get_inventory())
+  #   log_debug(ns = ns, "generating dialog inputs")
+  #   tagList(
+  #     textInput(ns("name"), "Name"),
+  #     selectInput(ns("status"), "Status", choices = get_inventory()$status |> levels()) |>
+  #       add_tooltip("Indicate whether this item needs confirmation, is current, or is outdated"),
+  #     selectizeInput(ns("vendor"), "Vendor", choices = get_inventory()$vendor |> levels(), options = list(create = TRUE)),
+  #     textInput(ns("catalog_nr"), "Catalog #"),
+  #     numericInput(ns("unit_price"), "Unit price", value = 0, min = 0),
+  #     textInput(ns("unit_size"), "Unit size"),
+  #     textInput(ns("url"), "URL"),
+  #     textAreaInput(ns("details"), "Details", resize = "vertical")
+  #   )
+  # })
 
 }
 
