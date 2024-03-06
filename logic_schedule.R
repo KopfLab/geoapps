@@ -170,8 +170,12 @@ combine_information <- function(
   }
 
   info <- paste0(section_info, day_time_info, location_info, enrollment_info)
+  # if all just placeholders, mark as "yes"
+  info <- ifelse(stringr::str_detect(info, "^([?#:, ]|in)*$"), "yes", info)
   # wrap info in italics if not confirmed
-  return(ifelse(!confirmed, sprintf("<i>%s</i>", info), info))
+  info <- ifelse(!confirmed, sprintf("<i>%s</i>", info), info)
+  #return
+  return(info)
 }
 
 # combine schedule

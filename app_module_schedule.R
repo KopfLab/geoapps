@@ -46,6 +46,7 @@ module_schedule_server <- function(input, output, session, data) {
       }
     }
     shinyjs::toggle("add_leave", condition = is_dev_mode() || !is.null(values$instructor_id))
+    shinyjs::toggle("add_class", condition = is_dev_mode() || !is.null(values$instructor_id))
   })
 
   # selected terms
@@ -243,9 +244,12 @@ module_schedule_server <- function(input, output, session, data) {
             "Schedule", textOutput(ns("instructor_name"), inline = TRUE),
             div(
               style = "position: absolute; right: 10px; top: 5px;",
-              #module_selector_table_deselect_all_button(ns("classes"), border = FALSE),
+              # add absence
               actionButton(ns("add_leave"), "Add Absence", icon = icon("rainbow"), style = "border: 0;") |>
                 add_tooltip("Add information about a teaching absence (sabbatical, family leave, chair, directorship, etc.).") |>
+                shinyjs::hidden(),
+              # add class
+              actionButton(ns("add_class"), "Schedule Class", icon = icon("person-chalkboard"), style = "border: 0;") |>
                 shinyjs::hidden(),
             )
           ), width = 12,
@@ -331,9 +335,8 @@ module_schedule_server <- function(input, output, session, data) {
     )
   }, priority = 99)
 
-  # add leave =========
+  # add leave dialog =========
   add_leave_dialog_inputs <- reactive({
-    #req(values$instructor_id)
     log_debug(ns = ns, "generating leave dialog inputs")
     tagList(
       if (!is.null(values$instructor_id)) {
@@ -360,14 +363,6 @@ module_schedule_server <- function(input, output, session, data) {
     )
   })
 
-  observe({
-    shinyjs::toggleState(
-      "save_leave",
-      condition = (!is.null(values$instructor_id) || nchar(input$leave_instructor_id) > 0) &&
-        nchar(input$leave_term) > 0 && nchar(input$leave_reason) > 0
-    )
-  })
-
   observeEvent(input$add_leave, {
     data$not_teaching$start_add()
     # modal dialog
@@ -383,10 +378,18 @@ module_schedule_server <- function(input, output, session, data) {
     showModal(dlg)
   })
 
+  observe({
+    shinyjs::toggleState(
+      "save_leave",
+      condition = (!is.null(values$instructor_id) || nchar(input$leave_instructor_id) > 0) &&
+        nchar(input$leave_term) > 0 && nchar(input$leave_reason) > 0
+    )
+  })
+
   # leave save =====
   observeEvent(input$save_leave, {
     # disable inputs while saving
-    c("leave_instructor_id", "leave_term_id", "leave_reason", "save") |>
+    c("leave_instructor_id", "leave_term", "leave_reason", "save_leave") |>
       purrr::walk(shinyjs::disable)
 
     # values
@@ -405,23 +408,81 @@ module_schedule_server <- function(input, output, session, data) {
     if (data$not_teaching$commit()) removeModal()
   })
 
+  # add class dialog =========
+  add_class_dialog_inputs <- reactive({
+    log_debug(ns = ns, "generating class dialog inputs")
+    tagList(
+      if (!is.null(values$instructor_id)) {
+        h4(values$instructor$full_name)
+      } else {
+        # super user only?
+        selectizeInput(
+          ns("class_instructor_id"), "Instructor",
+          multiple = FALSE,
+          choices = c("Select instructor" = "", get_active_geol_instructors())
+        )
+      },
+      selectizeInput(
+        ns("class_term"), "Term",
+        multiple = FALSE,
+        choices = c("Select term" = "", get_sorted_terms(get_selected_terms()))
+      ),
+      selectizeInput(
+        ns("class_id"), "Class",
+        multiple = FALSE,
+        choices = c("Select class" = "", levels(get_classes()$class))
+      )
+    )
+  })
 
-  # add/edit dialog ========
-  # add_edit_dialog_inputs <- reactive({
-  #   req(get_inventory())
-  #   log_debug(ns = ns, "generating dialog inputs")
-  #   tagList(
-  #     textInput(ns("name"), "Name"),
-  #     selectInput(ns("status"), "Status", choices = get_inventory()$status |> levels()) |>
-  #       add_tooltip("Indicate whether this item needs confirmation, is current, or is outdated"),
-  #     selectizeInput(ns("vendor"), "Vendor", choices = get_inventory()$vendor |> levels(), options = list(create = TRUE)),
-  #     textInput(ns("catalog_nr"), "Catalog #"),
-  #     numericInput(ns("unit_price"), "Unit price", value = 0, min = 0),
-  #     textInput(ns("unit_size"), "Unit size"),
-  #     textInput(ns("url"), "URL"),
-  #     textAreaInput(ns("details"), "Details", resize = "vertical")
-  #   )
-  # })
+  observeEvent(input$add_class, {
+    data$schedule$start_add()
+    # modal dialog
+    dlg <- modalDialog(
+      size = "s",
+      title = "Schedule Class",
+      add_class_dialog_inputs(),
+      footer = tagList(
+        actionButton(ns("save_class"), "Add") |> shinyjs::disabled(),
+        modalButton("Cancel")
+      )
+    )
+    showModal(dlg)
+  })
+
+  observe({
+    shinyjs::toggleState(
+      "save_class",
+      condition = (!is.null(values$instructor_id) || nchar(input$class_instructor_id) > 0) &&
+        nchar(input$class_term) > 0 && nchar(input$class_id) > 0
+    )
+  })
+
+  # class save =====
+  observeEvent(input$save_class, {
+    # disable inputs while saving
+    c("class_instructor_id", "class_term", "class_id", "save_class") |>
+      purrr::walk(shinyjs::disable)
+
+    # FIXME: do we need a safety check here that it doesn't already exist? probably yes
+
+    # values
+    values <- list(
+      term = input$class_term,
+      instructor_id =
+        if(!is.null(values$instructor_id)) values$instructor_id
+      else input$class_instructor_id,
+      class = input$class_id,
+      confirmed = FALSE
+    )
+
+    # update data
+    data$schedule$update(.list = values)
+
+    # commit
+    if (data$schedule$commit()) removeModal()
+  })
+
 
 }
 
