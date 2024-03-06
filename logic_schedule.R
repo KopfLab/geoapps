@@ -31,7 +31,8 @@ prepare_schedule <- function(schedule) {
       class = stringr::str_remove_all(class, "[ \\r\\n]"),
       instructor_id = stringr::str_remove_all(instructor_id, "[ \\r\\n]"),
       canceled = !is.na(.data$canceled) & .data$canceled,
-      deleted = !is.na(.data$deleted) & .data$deleted
+      deleted = !is.na(.data$deleted) & .data$deleted,
+      confirmed = !is.na(.data$confirmed) & .data$confirmed
     ) |>
     dplyr::mutate(
       instructor_id = ifelse(!is.na(.data$instructor_id) & nchar(.data$instructor_id) > 0,
@@ -108,7 +109,7 @@ string_not_empty_or_default <- function(s, default = "?") {
 
 # combine information
 combine_information <- function(
-    section, days, start_time, end_time, building, room, enrollment, enrollment_cap,
+    section, days, start_time, end_time, building, room, enrollment, enrollment_cap, confirmed,
     include_section_nr, include_day_time, include_location, include_enrollment) {
 
   if (length(section) == 0) return(character(0))
@@ -159,7 +160,10 @@ combine_information <- function(
       )
     if (include_day_time || include_location) enrollment_info <- paste0(", ", enrollment_info)
   }
-  paste0(section_info, day_time_info, location_info, enrollment_info)
+
+  info <- paste0(section_info, day_time_info, location_info, enrollment_info)
+  # wrap info in italics if not confirmed
+  return(ifelse(!confirmed, sprintf("<i>%s</i>", info), info))
 }
 
 # combine schedule
@@ -237,7 +241,7 @@ combine_schedule <- function(
           .data$class == "XXXX0000" & !is.na(.data$reason) ~ .data$reason,
           !include_section_nr && !include_day_time && !include_location && !include_enrollment ~ "yes",
           TRUE ~ combine_information(
-            .data$section, .data$days, .data$start_time, .data$end_time, .data$building, .data$room, .data$enrollment, .data$enrollment_cap,
+            .data$section, .data$days, .data$start_time, .data$end_time, .data$building, .data$room, .data$enrollment, .data$enrollment_cap, .data$confirmed,
             include_section_nr, include_day_time, include_location, include_enrollment)
         )
     ) |>

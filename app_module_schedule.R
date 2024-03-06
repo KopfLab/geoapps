@@ -170,7 +170,10 @@ module_schedule_server <- function(input, output, session, data) {
       dplyr::select(full_title, Instructor = instructor, dplyr::matches(get_term_regexp())) |>
       # escape html characters for safety and then create \n as <br>
       dplyr::mutate(dplyr::across(dplyr::where(is.character), function(x) {
-        x |> htmltools::htmlEscape() |> stringr::str_replace_all("\\n", "<br>")
+        x |> htmltools::htmlEscape() |> stringr::str_replace_all("\\n", "<br>") |>
+          # enable italics again
+          stringr::str_replace_all(stringr::fixed("&lt;i&gt;"), "<i>") |>
+          stringr::str_replace_all(stringr::fixed("&lt;/i&gt;"), "</i>")
       }))
   })
 
@@ -242,7 +245,10 @@ module_schedule_server <- function(input, output, session, data) {
           ), width = 12,
         status = "info", solidHeader = TRUE,
         module_selector_table_ui(ns("schedule")),
-        footer = tagList("Use the search bar in the upper right to filter the schedule (e.g. by instructor name, course number, etc.). Use the scrollbar to scroll through all results.")
+        footer = tagList(
+          "Use the search bar in the upper right to filter the schedule (e.g. by instructor name, course number, etc.). Use the scrollbar to scroll through all results.", tags$br(),
+          tags$strong("Note that classes that have not yet been confirmed by the UPA are shown in", tags$em("italics."))
+        )
       )
     )
   })
