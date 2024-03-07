@@ -65,6 +65,30 @@ prepare_schedule <- function(schedule) {
     dplyr::filter(!.data$deleted)
 }
 
+prepare_rooms <- function(schedule) {
+  schedule |>
+    dplyr::select("building", "room") |>
+    dplyr::distinct() |>
+    dplyr::filter(!is.na(.data$building), !is.na(.data$room)) |>
+    dplyr::filter(.data$building == "BESC") |>
+    dplyr::mutate(label = paste(.data$building, .data$room)) |>
+    dplyr::pull("label") |> sort()
+}
+
+prepare_teaching_times <- function(schedule) {
+  schedule |>
+    dplyr::select("days", "start_time", "end_time") |>
+    dplyr::distinct() |>
+    dplyr::filter(!is.na(.data$days), !is.na(.data$start_time), !is.na(.data$end_time)) |>
+    dplyr::mutate(
+      days = factor(stringr::str_to_upper(.data$days)) |> forcats::fct_relevel("MWF", "TTH", "MW", "WF"),
+      time = as.POSIXct(paste0(.data$start_time, "m"), format = "%I:%M%p")
+    ) |>
+    dplyr::arrange(.data$days, .data$time) |>
+    dplyr::mutate(label = sprintf("%s: %s-%s", .data$days, .data$start_time, .data$end_time)) |>
+    dplyr::pull("label")
+}
+
 # terms =======
 
 get_term_regexp <- function() {
@@ -228,14 +252,14 @@ combine_information <- function(
           sprintf("%s / %s students", enrollment, enrollment_cap),
         string_not_empty(enrollment) ~ sprintf("%s students", enrollment),
         string_not_empty(enrollment_cap) ~ sprintf("max %s students", enrollment_cap),
-        TRUE ~ "?"
+        TRUE ~ "room max"
       )
     if (include_day_time || include_location) enrollment_info <- paste0(", ", enrollment_info)
   }
 
   info <- paste0(section_info, day_time_info, location_info, enrollment_info)
   # if all just placeholders, mark as "yes"
-  info <- ifelse(stringr::str_detect(info, "^([?#:, ]|in)*$"), "yes", info)
+  info <- ifelse(stringr::str_detect(info, "^([?#:, ]|in|room max)*$"), "yes", info)
   # wrap info in italics if not confirmed
   info <- ifelse(!confirmed, paste0(unconfirmed_tags[1], info, unconfirmed_tags[2]), info)
   #return

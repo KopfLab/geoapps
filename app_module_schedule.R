@@ -71,10 +71,6 @@ module_schedule_server <- function(input, output, session, data) {
   get_future_terms <- reactive({
     req(get_selected_terms())
     terms <- get_selected_terms()
-    print(
-      get_selected_terms() |>
-        filter_terms(start_term = get_current_term(), inclusive = FALSE)
-    )
     # start in term after current
     get_selected_terms() |>
       filter_terms(start_term = get_current_term(), inclusive = FALSE)
@@ -122,6 +118,18 @@ module_schedule_server <- function(input, output, session, data) {
   get_reasons <- reactive({
     req(get_not_teaching())
     get_not_teaching()$reason |> unique() |> na.omit()
+  })
+
+  # rooms
+  get_rooms <- reactive({
+    req(data$schedule$get_data())
+    data$schedule$get_data() |> prepare_rooms()
+  })
+
+  # teaching times
+  get_teaching_times <- reactive({
+    req(data$schedule$get_data())
+    data$schedule$get_data() |> prepare_teaching_times()
   })
 
   # schedule
@@ -560,39 +568,96 @@ module_schedule_server <- function(input, output, session, data) {
     req(schedule$get_selected_ids())
     req(values$edit)
     log_debug(ns = ns, "generating class dialog inputs")
+
+    # first block
     tagList(
-      if (!is.null(values$instructor_id)) {
-        h4(values$instructor$full_name)
-      } else {
-        # super user only?
-        selectizeInput(
-          ns("class_instructor_id"), "Instructor",
-          multiple = FALSE,
-          choices = c("Select instructor" = "", get_active_geol_instructors()),
-          selected = values$edit$instructor_id
+      fluidRow(
+        column(
+          width = 6,
+          if (!is.null(values$instructor_id)) {
+            h4(values$instructor$full_name)
+          } else {
+            # super user only?
+            selectizeInput(
+              ns("class_instructor_id"), "Instructor",
+              multiple = FALSE,
+              choices = c("Select instructor" = "", get_active_geol_instructors()),
+              selected = values$edit$instructor_id
+            )
+          },
+          selectizeInput(
+            ns("class_term"), "Term",
+            multiple = FALSE,
+            choices = c("Select term" = "", get_sorted_terms(get_future_terms())),
+            selected = values$edit$term
+          )
+        ),
+        column(
+          width = 6,
+          selectizeInput(
+            ns("class_instructor_id2"), "Co-taught with",
+            multiple = TRUE,
+            choices = c("Class is not co-taught" = "", get_active_geol_instructors())
+          ),
+          selectizeInput(
+            ns("class_id"), "Class",
+            multiple = FALSE,
+            choices = c("Select class" = "", levels(get_classes()$class)),
+            selected = values$edit$class
+          ),
+          textInput(
+            ns("subtitle"), "Special Topics Title",
+            placeholder = "Enter a title for the special topics class"
+          ) |> shinyjs::hidden()
         )
-      },
-      selectizeInput(
-        ns("class_term"), "Term",
-        multiple = FALSE,
-        choices = c("Select term" = "", get_sorted_terms(get_future_terms())),
-        selected = values$edit$term
       ),
-      selectizeInput(
-        ns("class_id"), "Class",
-        multiple = FALSE,
-        choices = c("Select class" = "", levels(get_classes()$class)),
-        selected = values$edit$class
+      # optional dividier
+      fluidRow(
+        column(
+          width = 12,
+          HTML(
+            '<h4 style="width:100%; text-align:center; border-bottom: 1px solid #000; line-height:0.1em; margin:10px 0 20px;">
+          <span style = "background:#fff; padding:0 10px;">Preferences (optional)</span></h4>'
+          )
+        )
+      ),
+      # optional settings
+      fluidRow(
+        column(
+          width = 6,
+          textInput(ns("section"), "Does this section have a specific number?", placeholder = "No specific number"),
+          textInput(ns("max_students"), "Do you want to limit enrollment?", placeholder = "Use classroom limit")
+        ),
+        column(
+          width = 6,
+          selectizeInput(
+            ns("room_id"), "Do you have a preferred classroom?",
+            multiple = FALSE,
+            choices = c("No preference" = "", get_rooms())
+          ),
+          selectizeInput(
+            ns("timeslot"), "Do you have a preferred timeslot?",
+            multiple = FALSE,
+            choices = c("No preference" = "", get_teaching_times())
+          ),
+        )
       )
     )
   })
+  observeEvent(input$class_id, {
+    shinyjs::toggle("subtitle", condition = stringr::str_detect(input$class_id, "4700|5700"))
+    shinyjs::toggleState("save_class", condition = !stringr::str_detect(input$class_id, "4700|5700") || nchar(input$subtitle) > 0)
+  })
+  observeEvent(input$subtitle, {
+    shinyjs::toggleState("save_class", condition = !stringr::str_detect(input$class_id, "4700|5700") || nchar(input$subtitle) > 0)
+  }, ignoreNULL = FALSE, ignoreInit = FALSE)
 
   # add class =========
   observeEvent(input$add_class, {
     data$schedule$start_add()
     # modal dialog
     dlg <- modalDialog(
-      size = "s",
+      size = "m",
       title = "Schedule Class",
       add_class_dialog_inputs(),
       footer = tagList(
@@ -614,7 +679,8 @@ module_schedule_server <- function(input, output, session, data) {
   # save class =====
   observeEvent(input$save_class, {
     # disable inputs while saving
-    c("class_instructor_id", "class_term", "class_id", "save_class") |>
+    c("class_instructor_id", "class_term", "class_id", "save_class",
+      "subtitle", "class_instructor_id2", "section", "enrollment_cap", "room_id", "timeslot") |>
       purrr::walk(shinyjs::disable)
 
     # try to save
@@ -631,6 +697,30 @@ module_schedule_server <- function(input, output, session, data) {
         class = input$class_id,
         confirmed = FALSE
       )
+
+      # optional details
+      if (nchar(input$subtitle) > 0)
+        values$subtitle <- input$subtitle
+
+      if (!is.null(input$class_instructor_id2))
+        values$instructor_id <- c(values$instructor_id, input$class_instructor_id2) |> paste(collapse = ", ")
+
+      if (stringr::str_detect(input$class_id, "4700|5700") && nchar(input$section) > 0)
+        values$section <- input$section
+
+      if (nchar(input$max_students) > 0)
+        values$enrollment_cap <- stringr::str_extract(input$max_students, "\\d+") |> as.integer()
+
+      if (nchar(input$room_id) > 0) {
+        values$building <- stringr::str_extract(input$room_id, "^[^ ]+")
+        values$room <- stringr::str_extract(input$room_id, "(?<= ).+")
+      }
+
+      if (nchar(input$timeslot) > 0) {
+        values$days <- stringr::str_extract(input$timeslot, "^[^:]+")
+        values$start_time <- stringr::str_extract(input$timeslot, "(?<=: )[^-]+")
+        values$end_time <- stringr::str_extract(input$timeslot, "(?<=-).+")
+      }
 
       # update data
       data$schedule$update(.list = values)
