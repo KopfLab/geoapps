@@ -258,13 +258,15 @@ update_data <- function(df, .id, .idx = get_index_by_id(df, .id), ..., .list = N
     if (!is.null(.list)) updates <- quos(!!!.list)
     else updates <- enquos(...)
     for (i in seq_along(updates)) {
-      old_value <- df[[names(updates)[i]]][.idx]
-      new_value <- with(df[.idx,], eval_tidy(updates[[i]]))
-      # check if this is a change
-      # message(names(updates)[i], ": ", old_value, " / ", new_value, " --> ", is_value_identical(old_value, new_value))
-      if (!is_value_identical(old_value, new_value)) {
-        df[[names(updates)[i]]][.idx] <- new_value
-        df$.update[.idx] <- TRUE
+      for (idx in .idx) {
+        old_value <- df[[names(updates)[i]]][idx]
+        new_value <- with(df[.idx,], eval_tidy(updates[[i]]))
+        # check if this is a change
+        # message(names(updates)[i], ": ", old_value, " / ", new_value, " --> ", is_value_identical(old_value, new_value))
+        if (!is_value_identical(old_value, new_value)) {
+          df[[names(updates)[i]]][idx] <- new_value
+          df$.update[idx] <- TRUE
+        }
       }
     }
   }

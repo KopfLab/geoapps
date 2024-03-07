@@ -90,7 +90,8 @@ schedule_ui <- function() {
         )
       ),
       module_data_schedule_reload_button("schedule_data"),
-      module_schedule_sidebar("schedule")
+      module_schedule_sidebar("schedule"),
+      if (is_dev_mode()) actionButton("dev_mode_toggle", "Toggle Dev Mode")
     )
 
   # body

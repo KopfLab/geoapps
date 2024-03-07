@@ -37,6 +37,13 @@ schedule_server <- function(data_sheet_id, gs_key_file) {
     # paths module
     schedule <- callModule(module_schedule_server, id = "schedule", data = data)
 
+    # dev mode
+    observeEvent(input$dev_mode_toggle, {
+      if (is_dev_mode())
+        Sys.setenv('GEOPATHS_DEV'= 'OFF')
+      else
+        Sys.setenv('GEOPATHS_DEV'= 'ON')
+    })
   })
 
 }

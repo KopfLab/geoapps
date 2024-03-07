@@ -381,6 +381,55 @@ module_schedule_server <- function(input, output, session, data) {
 
   # formatting the headers depending on what terms are
 
+  # process record selection ================
+
+  observeEvent(schedule$get_selected_cells(), {
+
+    # disable edit buttons
+    shinyjs::disable("delete_leave")
+    shinyjs::disable("add_class")
+    shinyjs::disable("edit_class")
+    shinyjs::disable("delete_class")
+
+    # make sure something is selected
+    req(schedule$get_selected_ids())
+    log_debug(ns = ns, "new cell selected")
+
+    # build the edit information
+    values$edit <- list(
+      instructor_id = schedule$get_selected_items()$instructor_id,
+      instructor = schedule$get_selected_items()$Instructor,
+      class = as.character(schedule$get_selected_items()$class),
+      term = as.character(schedule$get_selected_cells()),
+      info = schedule$get_selected_items()[[as.character(schedule$get_selected_cells())]]
+    )
+
+    # check if it is a future record and if it is the instructor who is selected
+    # (unless in dev mode which could become an admin mode feature)
+    if (
+      is_term_after(values$edit$term) &&
+      ((is.null(values$instructor_id) && is_dev_mode()) || identical(values$instructor_id, values$edit$instructor_id))
+    ) {
+
+      # check which kind of record it is
+      if (values$edit$info %in% c("no", "?")) {
+        # unscheduled class
+        log_debug(ns = ns, "selected an unscheduled class")
+        shinyjs::enable("add_class")
+      } else if (values$edit$info %in% get_reasons()) {
+        # absence record
+        log_debug(ns = ns, "selected a teaching absence cell")
+        shinyjs::enable("delete_leave")
+      } else if (stringr::str_detect(values$edit$info, "^<i>")) {
+        # selected an unconfirmed scheduled class
+        log_debug(ns = ns, "selected an editable class")
+        shinyjs::enable("edit_class")
+        shinyjs::enable("delete_class")
+      }
+
+    }
+  })
+
   # add leave dialog =========
   add_leave_dialog_inputs <- reactive({
     log_debug(ns = ns, "generating leave dialog inputs")
@@ -398,7 +447,8 @@ module_schedule_server <- function(input, output, session, data) {
       selectizeInput(
         ns("leave_term"), "Term",
         multiple = FALSE,
-        choices = c("Select term" = "", get_sorted_terms(get_future_terms()))
+        choices = c("Select term" = "", get_sorted_terms(get_future_terms())),
+        selected = if(!is.null(values$edit$term)) values$edit$term else 1
       ),
       selectizeInput(
         ns("leave_reason"), "Type",
@@ -409,6 +459,7 @@ module_schedule_server <- function(input, output, session, data) {
     )
   })
 
+  # add leave ==============
   observeEvent(input$add_leave, {
     data$not_teaching$start_add()
     # modal dialog
@@ -432,30 +483,82 @@ module_schedule_server <- function(input, output, session, data) {
     )
   })
 
-  # leave save =====
+  # save leave =====
   observeEvent(input$save_leave, {
     # disable inputs while saving
     c("leave_instructor_id", "leave_term", "leave_reason", "save_leave") |>
       purrr::walk(shinyjs::disable)
 
-    # values
-    values <- list(
-      term = input$leave_term,
-      instructor_id =
-        if(!is.null(values$instructor_id)) values$instructor_id
+    # try to save
+    tryCatch({
+      # info
+      log_info("adding teaching absence", user_msg = "Adding teaching absence...")
+
+      # values
+      values <- list(
+        term = input$leave_term,
+        instructor_id =
+          if(!is.null(values$instructor_id)) values$instructor_id
         else input$leave_instructor_id,
-      reason = input$leave_reason
+        reason = input$leave_reason
+      )
+
+      # update data
+      data$not_teaching$update(.list = values)
+
+      # commit
+      if (data$not_teaching$commit()) removeModal()
+    },
+    error = function(e) {
+      log_error(ns = ns, "failed", user_msg = "Data saving error", error = e)
+    })
+  })
+
+  # delete leave ============
+  observeEvent(input$delete_leave, {
+    showModal(
+      modalDialog(
+        title="Delete teaching absence",
+        h4(
+          sprintf("Are you sure you want to delete the %s related teaching absence for %s in %s?",
+                  values$edit$info, values$edit$instructor, values$edit$term)
+        ),
+        footer = tagList(actionButton(ns("delete_leave_confirm"), "Delete"), modalButton("Cancel"))
+      )
     )
 
-    # update data
-    data$not_teaching$update(.list = values)
+  })
 
-    # commit
-    if (data$not_teaching$commit()) removeModal()
+  observeEvent(input$delete_leave_confirm, {
+    # pull out record
+    record <- get_not_teaching() |>
+      dplyr::filter(.data$instructor_id == !!values$edit$instructor_id, .data$term == !!values$edit$term)
+
+    # try to delete
+    tryCatch({
+      # is there a record?
+      if (nrow(record) == 0L)
+        stop("could not find teaching absence to delete")
+
+      # info
+      log_info("deleting teaching absence", user_msg = "Removing teaching absence...")
+
+      # flag for delete
+      data$not_teaching$start_edit(idx = record$idx)
+      data$not_teaching$update(deleted = TRUE)
+
+      # commit
+      if (data$not_teaching$commit()) removeModal()
+    },
+    error = function(e) {
+      log_error(ns = ns, "failed", user_msg = "Data saving error", error = e)
+    })
   })
 
   # add class dialog =========
   add_class_dialog_inputs <- reactive({
+    req(schedule$get_selected_ids())
+    req(values$edit)
     log_debug(ns = ns, "generating class dialog inputs")
     tagList(
       if (!is.null(values$instructor_id)) {
@@ -465,22 +568,26 @@ module_schedule_server <- function(input, output, session, data) {
         selectizeInput(
           ns("class_instructor_id"), "Instructor",
           multiple = FALSE,
-          choices = c("Select instructor" = "", get_active_geol_instructors())
+          choices = c("Select instructor" = "", get_active_geol_instructors()),
+          selected = values$edit$instructor_id
         )
       },
       selectizeInput(
         ns("class_term"), "Term",
         multiple = FALSE,
-        choices = c("Select term" = "", get_sorted_terms(get_future_terms()))
+        choices = c("Select term" = "", get_sorted_terms(get_future_terms())),
+        selected = values$edit$term
       ),
       selectizeInput(
         ns("class_id"), "Class",
         multiple = FALSE,
-        choices = c("Select class" = "", levels(get_classes()$class))
+        choices = c("Select class" = "", levels(get_classes()$class)),
+        selected = values$edit$class
       )
     )
   })
 
+  # add class =========
   observeEvent(input$add_class, {
     data$schedule$start_add()
     # modal dialog
@@ -504,97 +611,98 @@ module_schedule_server <- function(input, output, session, data) {
     )
   })
 
-  # class save =====
+  # save class =====
   observeEvent(input$save_class, {
     # disable inputs while saving
     c("class_instructor_id", "class_term", "class_id", "save_class") |>
       purrr::walk(shinyjs::disable)
 
-    # FIXME: do we need a safety check here that it doesn't already exist? probably yes
+    # try to save
+    tryCatch({
+      # info
+      log_info("adding class to schedule", user_msg = "Adding class to schedule...")
 
-    # values
-    values <- list(
-      term = input$class_term,
-      instructor_id =
-        if(!is.null(values$instructor_id)) values$instructor_id
-      else input$class_instructor_id,
-      class = input$class_id,
-      confirmed = FALSE
-    )
-
-    # update data
-    data$schedule$update(.list = values)
-
-    # commit
-    if (data$schedule$commit()) removeModal()
-  })
-
-  # process record selection ================
-
-  observeEvent(schedule$get_selected_cells(), {
-
-    # disable edit buttons
-    shinyjs::disable("delete_leave")
-    shinyjs::disable("add_class")
-    shinyjs::disable("edit_class")
-    shinyjs::disable("delete_class")
-
-    # make sure something is selected
-    req(schedule$get_selected_ids())
-    log_debug(ns = ns, "new cell selected")
-
-    # build the edit information
-    values$edit <- list(
-        instructor_id = schedule$get_selected_items()$instructor_id,
-        instructor = schedule$get_selected_items()$Instructor,
-        class = as.character(schedule$get_selected_items()$class),
-        term = as.character(schedule$get_selected_cells()),
-        info = schedule$get_selected_items()[[as.character(schedule$get_selected_cells())]]
+      # values
+      values <- list(
+        term = input$class_term,
+        instructor_id =
+          if(!is.null(values$instructor_id)) values$instructor_id
+        else input$class_instructor_id,
+        class = input$class_id,
+        confirmed = FALSE
       )
 
-    # check if it is a future record
-    if (is_term_after(values$edit$term)) {
+      # update data
+      data$schedule$update(.list = values)
 
-      # check if it is a absence record
-      if (values$edit$info %in% get_reasons()) {
-        log_debug(ns = ns, "selected a teaching absence cell")
-        shinyjs::enable("delete_leave")
-      }
-    }
+      # commit
+      if (data$schedule$commit()) removeModal()
+    },
+    error = function(e) {
+      log_error(ns = ns, "failed", user_msg = "Data saving error", error = e)
+    })
   })
 
-  # delete leave ============
-  observeEvent(input$delete_leave, {
+  # edit class ====
+  observeEvent(input$edit_class, {
     showModal(
       modalDialog(
-        title="Delete teaching absence",
-        h4(
-          sprintf("Are you sure you want to delete the %s related teaching absence for %s in %s?",
-                  values$edit$info, values$edit$instructor, values$edit$term)
-        ),
-        footer = tagList(actionButton(ns("delete_leave_confirm"), "Delete"), modalButton("Cancel"))
+        title="Edit scheduled class",
+        h4("Sorry, this functionality is not yet implemented. If you really need to change this class, please delete the existing record and add it anew."),
+        footer = tagList(modalButton("Cancel"))
       )
     )
 
   })
 
-  observeEvent(input$delete_leave_confirm, {
-    # pull out record
-    record <- get_not_teaching() |>
-      dplyr::filter(.data$instructor_id == !!values$edit$instructor_id, .data$term == !!values$edit$term)
+  # delete class ====
+  observeEvent(input$delete_class, {
+    showModal(
+      modalDialog(
+        title="Unschedule class",
+        h4(
+          sprintf("Are you sure you want to remove all sections of %s from the teaching schedule of %s for %s?",
+                  values$edit$class, values$edit$instructor, values$edit$term)
+        ),
+        footer = tagList(actionButton(ns("delete_class_confirm"), "Delete"), modalButton("Cancel"))
+      )
+    )
 
-    # safety check
-    if(nrow(record) != 1L) {
-      log_error("could not identify not teaching record", user_msg = "Could not delete record")
-    }
-
-    # flag for delete
-    data$not_teaching$start_edit(idx = record$idx)
-    data$not_teaching$update(deleted = TRUE)
-
-    # commit
-    if (data$not_teaching$commit()) removeModal()
   })
+
+  observeEvent(input$delete_class_confirm, {
+    # pull out record
+    record <- get_schedule() |>
+      dplyr::filter(
+        .data$class == !!values$edit$class,
+        .data$instructor_id == !!values$edit$instructor_id,
+        .data$term == !!values$edit$term
+      )
+
+    # try to delete
+    tryCatch({
+      # is there a record?
+      if (nrow(record) == 0L)
+        stop("could not find schedule record to delete")
+
+      # info
+      log_info(
+        "deleting schedule record(s)",
+        user_msg = sprintf("Unscheduling %d section%s...", nrow(record), if(nrow(record) > 0) "s")
+      )
+
+      # update
+      data$schedule$start_edit(idx = record$idx)
+      data$schedule$update(deleted = TRUE)
+
+      # commit
+      if (data$schedule$commit()) removeModal()
+    },
+    error = function(e) {
+      log_error(ns = ns, "failed", user_msg = "Data saving error", error = e)
+    })
+  })
+
 
 
 }
