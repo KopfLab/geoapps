@@ -24,15 +24,30 @@ prepare_instructors <- function(instructors) {
 
 prepare_not_teaching <- function(not_teaching) {
   not_teaching |>
+    # keep track of index (for editing purposes)
+    dplyr::mutate(
+      idx = dplyr::row_number(),
+      .before = 1L
+    ) |>
+    # only get the latest not teaching definition if there are multiple for a semester
     dplyr::filter(
       .by = c("instructor_id", "term"),
       dplyr::row_number() == dplyr::n()
-    )
+    ) |>
+    # define deleted properly
+    dplyr::mutate(deleted = !is.na(.data$deleted) & .data$deleted) |>
+    # remove deleted records
+    dplyr::filter(!.data$deleted)
 }
 
 prepare_schedule <- function(schedule) {
   # safety checks
   schedule |>
+    # keep track of index (for editing purposes)
+    dplyr::mutate(
+      idx = dplyr::row_number(),
+      .before = 1L
+    ) |>
     # note that this is an experimental function in tidyr
     tidyr::separate_longer_delim("instructor_id", delim = ",") |>
     dplyr::mutate(
@@ -45,13 +60,19 @@ prepare_schedule <- function(schedule) {
     dplyr::mutate(
       instructor_id = ifelse(!is.na(.data$instructor_id) & nchar(.data$instructor_id) > 0,
                              .data$instructor_id, "none")
-    )
+    ) |>
+    # remove deleted records
+    dplyr::filter(!.data$deleted)
 }
 
 # terms =======
 
 get_term_regexp <- function() {
   return("(Spring|Summer|Fall) \\d{4}")
+}
+
+check_terms <- function(terms) {
+  stringr::str_detect(terms, get_term_regexp())
 }
 
 get_current_term <- function() {
@@ -61,46 +82,88 @@ get_current_term <- function() {
   return(paste(season, year))
 }
 
-find_term <- function(terms, current_term = get_current_term(), years_shift) {
-  term <- which(levels(terms) == current_term) + years_shift * 3
-  if (term < 1) term <- 1
-  if (term > length(levels(terms))) term <- length(levels(terms))
-  return(levels(terms)[term])
+get_past_or_future_term <- function(reference_term = get_current_term(), years_shift = 0, season = get_term_season(reference_term)) {
+  paste(season, get_term_year(reference_term) + years_shift)
 }
 
+get_term_year <- function(term) {
+  term |> stringr::str_extract("\\d{4}") |> as.integer()
+}
+
+get_term_season <- function(term) {
+  term |> stringr::str_extract("Spring|Summer|Fall") |>
+    factor(levels = c("Spring", "Summer", "Fall"), ordered = TRUE)
+}
+
+# calculates the difference between two terms
+calculate_term_difference <- function(term1, term2) {
+  years_diff <- get_term_year(term2) - get_term_year(term1)
+  seasons_diff <- as.integer(get_term_season(term2)) - as.integer(get_term_season(term1))
+  return(years_diff * 3 + seasons_diff)
+}
+
+# check if a term is after another one
+is_term_after <- function(terms, after = get_current_term(), include_equal = FALSE) {
+  if (include_equal)
+    calculate_term_difference(after, terms) >= 0
+  else
+    calculate_term_difference(after, terms) > 0
+}
+# check if a term is before another one
+is_term_before <- function(terms, before = get_current_term(), include_equal = FALSE) {
+  if (include_equal)
+    calculate_term_difference(before, terms) <= 0
+  else
+    calculate_term_difference(before, terms) < 0
+}
+
+# filter terms depending on start/end
 filter_terms <- function(terms, start_term = NULL, end_term = NULL, inclusive = TRUE) {
-  if (!is.null(start_term)) {
-    terms <- if(inclusive) terms[terms >= start_term] else terms[terms > start_term]
-  }
+  # saftey checks
+  stopifnot(
+    "`terms` need to be valid terms" = terms |> check_terms() |> all(),
+    "`start_term` needs to be a valid term if provided" = is.null(start_term) || check_terms(start_term),
+    "`end_term` needs to be a valid term if provided" = is.null(end_term) || check_terms(end_term)
+  )
 
-  if (!is.null(end_term)) {
-    terms <- if(inclusive)  terms[terms <= end_term] else terms[terms < end_term]
-  }
-  return(terms |> droplevels())
+  if (!is.null(start_term))
+    terms <- terms[is_term_after(terms, after = start_term, include_equal = inclusive)]
+
+  if (!is.null(end_term))
+    terms <- terms[is_term_before(terms, before = end_term, include_equal = inclusive)]
+
+  return(terms)
 }
 
-drop_summers <- function(terms) {
-  terms[!stringr::str_detect(as.character(terms), "Summer")] |> droplevels()
-}
-
-# get available terms based on first term current term (based on current year) and number of years past current
+# get available terms based on first term and current term (based on current year) and number of years past current
 get_available_terms <- function(first_term, n_years_past_current = 5) {
   current_term <- get_current_term()
-  terms <-
-    paste(c("Spring", "Summer", "Fall"),
-          rep(readr::parse_number(first_term):(readr::parse_number(current_term) + n_years_past_current + 1), each = 3)) |>
-    forcats::fct_inorder(ordered = TRUE)
-  available_terms <- filter_terms(terms, first_term, find_term(terms, current_term, n_years_past_current))
+  available_terms <-
+    paste(
+      c("Spring", "Summer", "Fall"),
+      rep(get_term_year(first_term):(get_term_year(current_term) + n_years_past_current + 1), each = 3)
+    ) |>
+    filter_terms(
+      start_term = first_term,
+      end_term = get_past_or_future_term(years_shift = n_years_past_current)
+    )
   return(available_terms)
+}
+
+# drop summers
+drop_summers <- function(terms) {
+  terms[get_term_season(terms) != "Summer"]
 }
 
 # sort terms (past, current, future)
 get_sorted_terms <- function(terms) {
   current_term <- get_current_term()
-  list(
-    Past = filter_terms(terms, end_term = current_term, inclusive = FALSE) |> as.character() |> as.list(),
-    Current = list(current_term),
-    Future = filter_terms(terms, start_term = current_term, inclusive = FALSE) |> as.character() |> as.list()
+  past <- filter_terms(terms, end_term = current_term, inclusive = FALSE) |> as.list()
+  future <- filter_terms(terms, start_term = current_term, inclusive = FALSE) |> as.list()
+  c(
+    if (length(past) > 0) list(Past = past),
+    if (any(calculate_term_difference(terms, current_term) == 0)) list(Current = list(current_term)),
+    if (length(future) > 0) list(Future = future)
   )
 }
 
@@ -118,7 +181,8 @@ string_not_empty_or_default <- function(s, default = "?") {
 # combine information
 combine_information <- function(
     section, days, start_time, end_time, building, room, enrollment, enrollment_cap, confirmed,
-    include_section_nr, include_day_time, include_location, include_enrollment) {
+    include_section_nr, include_day_time, include_location, include_enrollment,
+    unconfirmed_tags = c("<i><u>", "</u></i>")) {
 
   if (length(section) == 0) return(character(0))
 
@@ -173,15 +237,16 @@ combine_information <- function(
   # if all just placeholders, mark as "yes"
   info <- ifelse(stringr::str_detect(info, "^([?#:, ]|in)*$"), "yes", info)
   # wrap info in italics if not confirmed
-  info <- ifelse(!confirmed, sprintf("<i>%s</i>", info), info)
+  info <- ifelse(!confirmed, paste0(unconfirmed_tags[1], info, unconfirmed_tags[2]), info)
   #return
   return(info)
 }
 
 # combine schedule
+# @param selected_terms the terms to include (will be listed in the order listed in the selected_terms vector)
 # @param instructor_schedule if provided, lists all classes ever taught by the faculty (no matter what term) and includes other faculty that taught those classes in the listing
 combine_schedule <- function(
-    schedule, not_teaching, instructors, classes, available_terms, selected_terms,
+    schedule, not_teaching, instructors, classes, selected_terms,
     separator = "\n", recognized_reasons = c(),
     include_section_nr = TRUE,
     include_day_time = TRUE,
@@ -196,38 +261,27 @@ combine_schedule <- function(
     "`not_teaching` needs to be a data frame" = is.data.frame(not_teaching),
     "`instructor` needs to be a data frame" = is.data.frame(instructors),
     "`classes` needs to be a data frame" = is.data.frame(classes),
-    "`selected_terms` needs to be a factor" = is.factor(selected_terms)
+    "`selected_terms` needs to be a character vector" = is.character(selected_terms)
   )
-  current_term <- get_current_term()
-
-  # recognize reasons
-  fill_empty <- function(values, allow_question_mark = FALSE) {
-    dplyr::case_when(
-      # no values at all and question mark is allowed
-      allow_question_mark & all(is.na(values)) ~ "?",
-      # some values are set, use them
-      !is.na(values) ~ values,
-      # if any remaining values are part of the recognized reasons, substitute those
-      any(values %in% recognized_reasons) ~ values[values %in% recognized_reasons][1],
-      # else put in "no"
-      TRUE ~ "no"
-    )
-  }
 
   # combine all info
   schedule_combined <-
     dplyr::bind_rows(
-      # actual schedule
-      schedule |> dplyr::filter(!.data$deleted),
-      # not teaching
-      not_teaching |> dplyr::mutate(class = "XXXX0000"),
-      # inactive
-      instructors |> dplyr::filter(.data$inactive) |>
+      # actual schedule (except deleted records)
+      schedule |>
+        dplyr::filter(!.data$deleted),
+      # not teaching (except deleted records)
+      not_teaching |>
+        dplyr::filter(!.data$deleted) |>
+        dplyr::mutate(class = "XXXX0000"),
+      # inactive (to flag as NOT teaching)
+      instructors |>
+        dplyr::filter(.data$inactive) |>
         tidyr::crossing(term = !!selected_terms) |>
         dplyr::mutate(class = "XXXX0000"),
       # future classes placeholder
       dplyr::tibble(
-        term = as.character(!!selected_terms),
+        term = !!selected_terms,
         class = "XXXX9999",
         instructor_id = "other"
       )
@@ -242,10 +296,24 @@ combine_schedule <- function(
       dplyr::filter(.data$term %in% !!selected_terms)
   }
 
-  # info + factorize
+  # fill empty
+  fill_empty <- function(values, allow_question_mark = FALSE) {
+    dplyr::case_when(
+      # no values at all and question mark is allowed
+      allow_question_mark & all(is.na(values)) ~ "?",
+      # some values are set, use them
+      !is.na(values) ~ values,
+      # if any remaining values are part of the recognized reasons, substitute those
+      any(values %in% recognized_reasons) ~ values[values %in% recognized_reasons][1],
+      # else put in "no"
+      TRUE ~ "no"
+    )
+  }
+
+  # factorize and add info
+  current_term <- get_current_term()
   schedule_combined <- schedule_combined |>
     dplyr::mutate(
-      term = factor(.data$term, levels = levels(!!selected_terms)),
       class = factor(.data$class, levels = levels(classes$class)),
       info =
         dplyr::case_when(
@@ -260,18 +328,19 @@ combine_schedule <- function(
     droplevels() |>
     # make sure to account for same instructor teaching multiple sections of the same class (e.g. in 1030)
     dplyr::summarize(info = paste(info, collapse = separator), .by = c(term, class, subtitle, instructor_id)) |>
-    # pivot wider
+    # pivot wider (sort by terms first to make sure pivoted columns have the right order)
+    dplyr::arrange(get_term_year(term), get_term_season(term)) |>
     tidyr::pivot_wider(id_cols = c(class, subtitle, instructor_id), names_from = term, values_from = info) |>
     # remove the future classes placeholder
     dplyr::filter(.data$class != "XXXX9999") |>
     # for each instructor fill in past and future values
     dplyr::mutate(
       dplyr::across(
-        dplyr::any_of(available_terms[available_terms <= current_term]),
+        dplyr::any_of(selected_terms[is_term_before(selected_terms, before = current_term, include_equal = TRUE)]),
         ~fill_empty(.x)
       ),
       dplyr::across(
-        dplyr::any_of(available_terms[available_terms > current_term]),
+        dplyr::any_of(selected_terms[is_term_after(selected_terms, after = current_term)]),
         ~fill_empty(.x, allow_question_mark = TRUE)
       ),
       .by = instructor_id
@@ -315,8 +384,9 @@ combine_schedule <- function(
   # return
   schedule_combined |>
     # select which columns
-    dplyr::select("class", "full_title", "instructor", !!!levels(selected_terms)) |>
+    dplyr::select("class", "full_title", "instructor_id", "instructor", !!!selected_terms) |>
     # arrange
-    dplyr::arrange(.data$class, .data$full_title, .data$instructor)
+    dplyr::arrange(.data$class, .data$full_title, .data$instructor) |>
+    dplyr::mutate(row = dplyr::row_number(), .before = 1L)
 }
 

@@ -12,7 +12,8 @@ module_schedule_server <- function(input, output, session, data) {
     first_term = NULL,
     last_term = NULL,
     instructor_id = NULL,
-    instructor = NULL
+    instructor = NULL,
+    edit = list()
   )
 
   # data functions ===========
@@ -46,7 +47,10 @@ module_schedule_server <- function(input, output, session, data) {
       }
     }
     shinyjs::toggle("add_leave", condition = is_dev_mode() || !is.null(values$instructor_id))
+    shinyjs::toggle("delete_leave", condition = is_dev_mode() || !is.null(values$instructor_id))
     shinyjs::toggle("add_class", condition = is_dev_mode() || !is.null(values$instructor_id))
+    shinyjs::toggle("edit_class", condition = is_dev_mode() || !is.null(values$instructor_id))
+    shinyjs::toggle("delete_class", condition = is_dev_mode() || !is.null(values$instructor_id))
   })
 
   # selected terms
@@ -61,6 +65,19 @@ module_schedule_server <- function(input, output, session, data) {
       terms <- terms |> drop_summers()
     }
     return(terms)
+  })
+
+  # future terms
+  get_future_terms <- reactive({
+    req(get_selected_terms())
+    terms <- get_selected_terms()
+    print(
+      get_selected_terms() |>
+        filter_terms(start_term = get_current_term(), inclusive = FALSE)
+    )
+    # start in term after current
+    get_selected_terms() |>
+      filter_terms(start_term = get_current_term(), inclusive = FALSE)
   })
 
   # classes
@@ -138,12 +155,8 @@ module_schedule_server <- function(input, output, session, data) {
       log_error(ns = ns, msg, user_msg = paste0(data_err_prefix, msg))
     }
 
-    # schedule with unique ID (for editing purposes)
-    schedule |>
-      dplyr::mutate(
-        id = dplyr::row_number(),
-        .before = 1L
-      )
+    # return schedule
+    return(schedule)
   })
 
   # schedule for data table
@@ -158,29 +171,34 @@ module_schedule_server <- function(input, output, session, data) {
     schedule$reset_visible_columns()
 
     # combine schedule information
-    combine_schedule(
-      schedule = get_schedule(),
-      not_teaching = get_not_teaching(),
-      instructors = get_instructors(),
-      classes = get_classes(),
-      available_terms = get_terms(),
-      selected_terms = get_selected_terms(),
-      recognized_reasons = get_reasons(),
-      include_section_nr = "Section #" %in% input$show_options,
-      include_day_time = "Day/Time" %in% input$show_options,
-      include_location = "Location" %in% input$show_options,
-      include_enrollment = "Enrollment" %in% input$show_options,
-      instructor_schedule = values$instructor_id
-    ) |>
+    schedule_table <-
+      combine_schedule(
+        schedule = get_schedule(),
+        not_teaching = get_not_teaching(),
+        instructors = get_instructors(),
+        classes = get_classes(),
+        selected_terms = get_selected_terms(),
+        recognized_reasons = get_reasons(),
+        include_section_nr = "Section #" %in% input$show_options,
+        include_day_time = "Day/Time" %in% input$show_options,
+        include_location = "Location" %in% input$show_options,
+        include_enrollment = "Enrollment" %in% input$show_options,
+        instructor_schedule = values$instructor_id
+      ) |>
       # select columns here to get proper order (instead of later, since the cols are dynamic depending on terms)
-      dplyr::select(full_title, Instructor = instructor, dplyr::matches(get_term_regexp())) |>
+      dplyr::select("row", "instructor_id", "class", "full_title", Instructor = "instructor", dplyr::matches(get_term_regexp())) |>
       # escape html characters for safety and then create \n as <br>
       dplyr::mutate(dplyr::across(dplyr::where(is.character), function(x) {
         x |> htmltools::htmlEscape() |> stringr::str_replace_all("\\n", "<br>") |>
           # enable italics again
           stringr::str_replace_all(stringr::fixed("&lt;i&gt;"), "<i>") |>
-          stringr::str_replace_all(stringr::fixed("&lt;/i&gt;"), "</i>")
+          stringr::str_replace_all(stringr::fixed("&lt;/i&gt;"), "</i>") |>
+          stringr::str_replace_all(stringr::fixed("&lt;u&gt;"), "<u>") |>
+          stringr::str_replace_all(stringr::fixed("&lt;/u&gt;"), "</u>")
       }))
+
+    # return schedule table
+    return(schedule_table)
   })
 
   # generate UI =====================
@@ -198,7 +216,7 @@ module_schedule_server <- function(input, output, session, data) {
         choices = get_sorted_terms(terms),
         selected =
           isolate({
-            if (!is.null(values$first_term) && values$first_term %in% as.character(terms)) values$first_term
+            if (!is.null(values$first_term) && values$first_term %in% terms) values$first_term
             else get_current_term()
           })
       ),
@@ -208,8 +226,8 @@ module_schedule_server <- function(input, output, session, data) {
         choices = get_sorted_terms(terms),
         selected =
           isolate({
-            if (!is.null(values$last_term) && values$last_term %in% as.character(terms)) values$last_term
-            else find_term(get_terms(), years_shift = +2)
+            if (!is.null(values$last_term) && values$last_term %in% terms) values$last_term
+            else get_past_or_future_term(years_shift = +2)
           })
       ),
       selectizeInput(
@@ -244,20 +262,34 @@ module_schedule_server <- function(input, output, session, data) {
             "Schedule", textOutput(ns("instructor_name"), inline = TRUE),
             div(
               style = "position: absolute; right: 10px; top: 5px;",
-              # add absence
-              actionButton(ns("add_leave"), "Add Absence", icon = icon("rainbow"), style = "border: 0;") |>
-                add_tooltip("Add information about a teaching absence (sabbatical, family leave, chair, directorship, etc.).") |>
-                shinyjs::hidden(),
               # add class
               actionButton(ns("add_class"), "Schedule Class", icon = icon("person-chalkboard"), style = "border: 0;") |>
                 shinyjs::hidden(),
+              # edit class
+              actionButton(ns("edit_class"), "Edit Schedule", icon = icon("pen-to-square"), style = "border: 0;") |>
+                shinyjs::disabled() |> shinyjs::hidden(),
+              # delete class
+              actionButton(ns("delete_class"), "Unschedule", icon = icon("xmark"), style = "border: 0;") |>
+                shinyjs::disabled() |> shinyjs::hidden(),
+              # add absence
+              actionButton(ns("add_leave"), "Add Absence", icon = icon("plane"), style = "border: 0;") |>
+                add_tooltip("Add information about a teaching absence (sabbatical, family leave, chair, directorship, etc.).") |>
+                shinyjs::hidden(),
+              # delete absence
+              actionButton(ns("delete_leave"), "Delete Absence", icon = icon("plane-slash"), style = "border: 0;") |>
+                add_tooltip("Delete a teaching absence.") |>
+                shinyjs::disabled() |> shinyjs::hidden()
             )
           ), width = 12,
         status = "info", solidHeader = TRUE,
         module_selector_table_ui(ns("schedule")),
         footer = tagList(
-          "Use the search bar in the upper right to filter the schedule (e.g. by instructor name, course number, etc.). Use the scrollbar to scroll through all results.", tags$br(),
-          tags$strong("Note that classes that have not yet been confirmed by the UPA are shown in", tags$em("italics."))
+          "Use the search bar in the upper right to filter the schedule (e.g. by course number or course name). ",
+          "Use the scrollbar to scroll through all results.", "Modifications are only possible once a specific instructor is selected in the left menu bar, and only for future semesters (highlighted in ",
+          tags$span(style = "background-color: yellow;", "yellow"),
+          ") and classes that have not yet been confirmed by the UPA (shown in ",
+          HTML("<i><u>underlined italics</u></i>"), "). ",
+          "To modify anything else, please contact our UPA at ", tags$a(href = "mailto:geoupa@colorado.edu", target = "_new", "geoupa@colorado.edu"), "."
         )
       )
     )
@@ -291,19 +323,19 @@ module_schedule_server <- function(input, output, session, data) {
     ignoreNULL = FALSE, priority = 100
   )
 
-  # schedule table ======
+  # generate table ======
 
   schedule <- callModule(
     module_selector_table_server,
     "schedule",
     get_data = get_schedule_for_table,
-    id_column = "id",
+    id_column = "row",
     # row grouping
     render_html = dplyr::everything(),
     extensions = "RowGroup",
-    rowGroup = list(dataSrc = 0),
+    rowGroup = list(dataSrc = 3),
     columnDefs = list(
-      list(visible = FALSE, targets = 0)
+      list(visible = FALSE, targets = 0:3)
     ),
     # view all & scrolling
     allow_view_all = TRUE,
@@ -311,7 +343,7 @@ module_schedule_server <- function(input, output, session, data) {
     dom = "ft",
     ordering = FALSE,
     scrollX = TRUE,
-    scrollY = "calc(100vh - 280px)", # account for size of header with the -x px
+    scrollY = "calc(100vh - 300px)", # account for size of header with the -x px
     # don't escape (since we made the columns safe and replaced \n with <br>)
     escape = FALSE,
     selection = list(mode = "single", target = "cell")
@@ -335,6 +367,20 @@ module_schedule_server <- function(input, output, session, data) {
     )
   }, priority = 99)
 
+  # formatting the headers based on which terms are selected
+  observeEvent(get_selected_terms(), {
+    log_debug(ns = ns, "updating header backgrounds")
+    future_idx <- is_term_after(get_selected_terms(), after = get_current_term()) |> which()
+    header_calls <- sprintf("$(thead).closest('thead').find('th').eq(%s).css('background-color', 'yellow');", future_idx)
+    schedule$update_options(
+      headerCallback = DT::JS(
+        sprintf("function( thead, data, start, end, display ) { %s }", paste(header_calls, collapse = " "))
+      )
+    )
+  }, priority = 98)
+
+  # formatting the headers depending on what terms are
+
   # add leave dialog =========
   add_leave_dialog_inputs <- reactive({
     log_debug(ns = ns, "generating leave dialog inputs")
@@ -352,7 +398,7 @@ module_schedule_server <- function(input, output, session, data) {
       selectizeInput(
         ns("leave_term"), "Term",
         multiple = FALSE,
-        choices = c("Select term" = "", get_sorted_terms(get_selected_terms()))
+        choices = c("Select term" = "", get_sorted_terms(get_future_terms()))
       ),
       selectizeInput(
         ns("leave_reason"), "Type",
@@ -425,7 +471,7 @@ module_schedule_server <- function(input, output, session, data) {
       selectizeInput(
         ns("class_term"), "Term",
         multiple = FALSE,
-        choices = c("Select term" = "", get_sorted_terms(get_selected_terms()))
+        choices = c("Select term" = "", get_sorted_terms(get_future_terms()))
       ),
       selectizeInput(
         ns("class_id"), "Class",
@@ -481,6 +527,73 @@ module_schedule_server <- function(input, output, session, data) {
 
     # commit
     if (data$schedule$commit()) removeModal()
+  })
+
+  # process record selection ================
+
+  observeEvent(schedule$get_selected_cells(), {
+
+    # disable edit buttons
+    shinyjs::disable("delete_leave")
+    shinyjs::disable("add_class")
+    shinyjs::disable("edit_class")
+    shinyjs::disable("delete_class")
+
+    # make sure something is selected
+    req(schedule$get_selected_ids())
+    log_debug(ns = ns, "new cell selected")
+
+    # build the edit information
+    values$edit <- list(
+        instructor_id = schedule$get_selected_items()$instructor_id,
+        instructor = schedule$get_selected_items()$Instructor,
+        class = as.character(schedule$get_selected_items()$class),
+        term = as.character(schedule$get_selected_cells()),
+        info = schedule$get_selected_items()[[as.character(schedule$get_selected_cells())]]
+      )
+
+    # check if it is a future record
+    if (is_term_after(values$edit$term)) {
+
+      # check if it is a absence record
+      if (values$edit$info %in% get_reasons()) {
+        log_debug(ns = ns, "selected a teaching absence cell")
+        shinyjs::enable("delete_leave")
+      }
+    }
+  })
+
+  # delete leave ============
+  observeEvent(input$delete_leave, {
+    showModal(
+      modalDialog(
+        title="Delete teaching absence",
+        h4(
+          sprintf("Are you sure you want to delete the %s related teaching absence for %s in %s?",
+                  values$edit$info, values$edit$instructor, values$edit$term)
+        ),
+        footer = tagList(actionButton(ns("delete_leave_confirm"), "Delete"), modalButton("Cancel"))
+      )
+    )
+
+  })
+
+  observeEvent(input$delete_leave_confirm, {
+    # pull out record
+    record <- get_not_teaching() |>
+      dplyr::filter(.data$instructor_id == !!values$edit$instructor_id, .data$term == !!values$edit$term)
+
+    # safety check
+    if(nrow(record) != 1L) {
+      log_error("could not identify not teaching record", user_msg = "Could not delete record")
+    }
+
+    # flag for delete
+    data$not_teaching$start_edit(idx = record$idx)
+    data$not_teaching$update(deleted = TRUE)
+
+    # commit
+    if (data$not_teaching$commit()) removeModal()
   })
 
 

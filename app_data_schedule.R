@@ -44,7 +44,7 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
     data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
     report_error = report_error,  reload_data = reload_data,
     sheet = "not_teaching",
-    cols = c("term", "instructor_id", "reason")
+    cols = c("term", "instructor_id", "reason", "deleted" = "logical")
   )
 
   # schedule

@@ -15,6 +15,7 @@
 #' @param selection see parameter for data table (none, single, multiple)
 #' @param render_html list of columns which should NOT be html escaped (e.g. for links), use dplyr::everything() to render everything
 #' @param formatting_calls list of lists with function and columns e.g. list(list(func = formatCurrency, columns = "x)) or a columns expressione.g. list(list(func = formatCurrencty, columns_expr = rlang::expr(matches("abc"))))
+#' @param ... passed to options
 module_selector_table_server <- function(
     input, output, session, get_data,
     id_column,
@@ -58,7 +59,8 @@ module_selector_table_server <- function(
     search = "", # search term
     order = list(), # ordering information
     filter = match.arg(filter), # filter setting
-    formatting_calls = formatting_calls # formatting calls
+    formatting_calls = formatting_calls, # formatting calls
+    options = list(...) #
   )
 
   # create table df =============
@@ -149,21 +151,23 @@ module_selector_table_server <- function(
               else setdiff(names(get_table_df_visible_cols()), render_html),
             editable = editable,
             extensions = extensions,
-            options = list(
-              order = values$order,
-              ordering = ordering,
-              pageLength = values$page_length,
-              search = list(regex = FALSE, caseInsensitive = TRUE, search = values$search),
-              displayStart = values$display_start,
-              lengthMenu = page_lengths,
-              searchDelay = 100,
-              dom = dom,
-              #columns= values$columns, # this does not work to restore the search, breaks the table instead
-              # could maybe do it in javascript, ideas here: https://datatables.net/forums/discussion/53287/how-to-reset-values-in-individual-column-searching-text-inputs-at-a-button-click
-              stateSave = FALSE,
-              # disable the automatic state reload to avoid issues between different table instances
-              stateLoadParams = DT::JS("function (settings, data) { return false; }"),
-              ...
+            options = c(
+              list(
+                order = values$order,
+                ordering = ordering,
+                pageLength = values$page_length,
+                search = list(regex = FALSE, caseInsensitive = TRUE, search = values$search),
+                displayStart = values$display_start,
+                lengthMenu = page_lengths,
+                searchDelay = 100,
+                dom = dom,
+                #columns= values$columns, # this does not work to restore the search, breaks the table instead
+                # could maybe do it in javascript, ideas here: https://datatables.net/forums/discussion/53287/how-to-reset-values-in-individual-column-searching-text-inputs-at-a-button-click
+                stateSave = FALSE,
+                # disable the automatic state reload to avoid issues between different table instances
+                stateLoadParams = DT::JS("function (settings, data) { return false; }")
+              ),
+              values$options
             ),
             callback =
               if (enable_dblclick) {
@@ -239,6 +243,13 @@ module_selector_table_server <- function(
   change_formatting_calls <- function(formatting_calls) {
     isolate({
       values$formatting_calls <- formatting_calls
+    })
+  }
+
+  # update options (always isolated! trigger independently)
+  update_options <- function(...) {
+    isolate({
+      values$options <- utils::modifyList(values$options, list(...))
     })
   }
 
@@ -475,7 +486,8 @@ module_selector_table_server <- function(
     get_selected_items = get_selected_items,
     set_visible_columns = set_visible_columns,
     reset_visible_columns = reset_visible_columns,
-    change_formatting_calls = change_formatting_calls
+    change_formatting_calls = change_formatting_calls,
+    update_options = update_options
   )
 }
 

@@ -104,10 +104,15 @@ module_data_table_server <- function(
     values$edit_idx <- NULL
   }
 
-  start_edit <- function(id, idx = get_index_by_id(values$data, id)) {
-    log_debug(ns = ns, "starting edit for ",
-              sprintf("id '%s' / idx %d", id, idx) |>
-                paste(collapse = ", "))
+  start_edit <- function(id = NULL, idx = get_index_by_id(values$data, id)) {
+    if (!is.null(id)) {
+      log_debug(ns = ns, "starting edit for ",
+                sprintf("id '%s' / idx %d", id, idx) |>
+                  paste(collapse = ", "))
+    } else {
+      log_debug(ns = ns, "starting edit for ",
+                sprintf("idx %d", idx) |> paste(collapse = ", "))
+    }
     values$edit_id <- id
     values$edit_idx <- idx
   }
