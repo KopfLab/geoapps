@@ -702,13 +702,13 @@ module_schedule_server <- function(input, output, session, data) {
       )
 
       # optional details
-      if (nchar(input$subtitle) > 0)
-        data_values$subtitle <- input$subtitle
-
       if (!is.null(input$class_instructor_id2))
         data_values$instructor_id <- c(data_values$instructor_id, input$class_instructor_id2) |> paste(collapse = ", ")
 
-      if (stringr::str_detect(input$class_id, "4700|5700") && nchar(input$section) > 0)
+      if (stringr::str_detect(input$class_id, "4700|5700") && nchar(input$subtitle) > 0)
+        data_values$subtitle <- input$subtitle
+
+      if (nchar(input$section) > 0)
         data_values$section <- input$section
 
       if (nchar(input$max_students) > 0)
