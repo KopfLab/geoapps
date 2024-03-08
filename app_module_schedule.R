@@ -37,8 +37,8 @@ module_schedule_server <- function(input, output, session, data) {
   # monitor instructor
   observeEvent(input$instructor_id, {
     if (is.null(values$instructor_id) || !identical(values$instructor_id, input$instructor_id)) {
-      log_debug(ns = ns, "new instructor_id selected: ", input$instructor_id)
-      if (!is.na(input$instructor_id) && input$instructor_id != "NA") {
+      log_debug(ns = ns, "new instructor_id selected: '", input$instructor_id, "'")
+      if (!is.na(input$instructor_id) && input$instructor_id != "NA" && nchar(input$instructor_id) > 0) {
         values$instructor_id <- input$instructor_id
         values$instructor <- dplyr::filter(get_instructors(), .data$instructor_id == values$instructor_id)[1,]
       } else {
@@ -569,22 +569,25 @@ module_schedule_server <- function(input, output, session, data) {
     req(values$edit)
     log_debug(ns = ns, "generating class dialog inputs")
 
+    # instructor selectize
+    instructor_input <-
+      selectizeInput(
+        ns("class_instructor_id"), "Instructor",
+        multiple = FALSE,
+        choices = c("Select instructor" = "", get_active_geol_instructors()),
+        selected = values$edit$instructor_id
+      )
+
+    if (!is.null(values$instructor_id) || !is_dev_mode()) {
+      instructor_input <- instructor_input |> shinyjs::disabled()
+    }
+
     # first block
     tagList(
       fluidRow(
         column(
           width = 6,
-          if (!is.null(values$instructor_id)) {
-            h4(values$instructor$full_name)
-          } else {
-            # super user only?
-            selectizeInput(
-              ns("class_instructor_id"), "Instructor",
-              multiple = FALSE,
-              choices = c("Select instructor" = "", get_active_geol_instructors()),
-              selected = values$edit$instructor_id
-            )
-          },
+          instructor_input,
           selectizeInput(
             ns("class_term"), "Term",
             multiple = FALSE,
@@ -611,7 +614,7 @@ module_schedule_server <- function(input, output, session, data) {
           ) |> shinyjs::hidden()
         )
       ),
-      # optional dividier
+      # optional divider
       fluidRow(
         column(
           width = 12,
@@ -689,7 +692,7 @@ module_schedule_server <- function(input, output, session, data) {
       log_info("adding class to schedule", user_msg = "Adding class to schedule...")
 
       # values
-      values <- list(
+      data_values <- list(
         term = input$class_term,
         instructor_id =
           if(!is.null(values$instructor_id)) values$instructor_id
@@ -700,30 +703,30 @@ module_schedule_server <- function(input, output, session, data) {
 
       # optional details
       if (nchar(input$subtitle) > 0)
-        values$subtitle <- input$subtitle
+        data_values$subtitle <- input$subtitle
 
       if (!is.null(input$class_instructor_id2))
-        values$instructor_id <- c(values$instructor_id, input$class_instructor_id2) |> paste(collapse = ", ")
+        data_values$instructor_id <- c(data_values$instructor_id, input$class_instructor_id2) |> paste(collapse = ", ")
 
       if (stringr::str_detect(input$class_id, "4700|5700") && nchar(input$section) > 0)
-        values$section <- input$section
+        data_values$section <- input$section
 
       if (nchar(input$max_students) > 0)
-        values$enrollment_cap <- stringr::str_extract(input$max_students, "\\d+") |> as.integer()
+        data_values$enrollment_cap <- stringr::str_extract(input$max_students, "\\d+") |> as.integer()
 
       if (nchar(input$room_id) > 0) {
-        values$building <- stringr::str_extract(input$room_id, "^[^ ]+")
-        values$room <- stringr::str_extract(input$room_id, "(?<= ).+")
+        data_values$building <- stringr::str_extract(input$room_id, "^[^ ]+")
+        data_values$room <- stringr::str_extract(input$room_id, "(?<= ).+")
       }
 
       if (nchar(input$timeslot) > 0) {
-        values$days <- stringr::str_extract(input$timeslot, "^[^:]+")
-        values$start_time <- stringr::str_extract(input$timeslot, "(?<=: )[^-]+")
-        values$end_time <- stringr::str_extract(input$timeslot, "(?<=-).+")
+        data_values$days <- stringr::str_extract(input$timeslot, "^[^:]+")
+        data_values$start_time <- stringr::str_extract(input$timeslot, "(?<=: )[^-]+")
+        data_values$end_time <- stringr::str_extract(input$timeslot, "(?<=-).+")
       }
 
       # update data
-      data$schedule$update(.list = values)
+      data$schedule$update(.list = data_values)
 
       # commit
       if (data$schedule$commit()) removeModal()
