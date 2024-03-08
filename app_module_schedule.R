@@ -649,11 +649,7 @@ module_schedule_server <- function(input, output, session, data) {
   })
   observeEvent(input$class_id, {
     shinyjs::toggle("subtitle", condition = stringr::str_detect(input$class_id, "4700|5700"))
-    shinyjs::toggleState("save_class", condition = !stringr::str_detect(input$class_id, "4700|5700") || nchar(input$subtitle) > 0)
   })
-  observeEvent(input$subtitle, {
-    shinyjs::toggleState("save_class", condition = !stringr::str_detect(input$class_id, "4700|5700") || nchar(input$subtitle) > 0)
-  }, ignoreNULL = FALSE, ignoreInit = FALSE)
 
   # add class =========
   observeEvent(input$add_class, {
@@ -675,7 +671,8 @@ module_schedule_server <- function(input, output, session, data) {
     shinyjs::toggleState(
       "save_class",
       condition = (!is.null(values$instructor_id) || nchar(input$class_instructor_id) > 0) &&
-        nchar(input$class_term) > 0 && nchar(input$class_id) > 0
+        nchar(input$class_term) > 0 && nchar(input$class_id) > 0 &&
+        (!stringr::str_detect(input$class_id, "4700|5700") || nchar(input$subtitle) > 0)
     )
   })
 
