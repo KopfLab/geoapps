@@ -449,7 +449,8 @@ module_schedule_server <- function(input, output, session, data) {
         selectizeInput(
           ns("leave_instructor_id"), "Instructor",
           multiple = FALSE,
-          choices = c("Select instructor" = "", get_active_geol_instructors())
+          choices = c("Select instructor" = "", get_active_geol_instructors()),
+          selected = values$edit$instructor_id
         )
       },
       selectizeInput(
@@ -508,7 +509,8 @@ module_schedule_server <- function(input, output, session, data) {
         instructor_id =
           if(!is.null(values$instructor_id)) values$instructor_id
         else input$leave_instructor_id,
-        reason = input$leave_reason
+        reason = input$leave_reason,
+        created = get_datetime()
       )
 
       # update data
@@ -553,7 +555,7 @@ module_schedule_server <- function(input, output, session, data) {
 
       # flag for delete
       data$not_teaching$start_edit(idx = record$idx)
-      data$not_teaching$update(deleted = TRUE)
+      data$not_teaching$update(deleted = get_datetime())
 
       # commit
       if (data$not_teaching$commit()) removeModal()
@@ -695,6 +697,7 @@ module_schedule_server <- function(input, output, session, data) {
           if(!is.null(values$instructor_id)) values$instructor_id
         else input$class_instructor_id,
         class = input$class_id,
+        created = get_datetime(),
         confirmed = FALSE
       )
 
@@ -783,7 +786,7 @@ module_schedule_server <- function(input, output, session, data) {
 
       # update
       data$schedule$start_edit(idx = record$idx)
-      data$schedule$update(deleted = TRUE)
+      data$schedule$update(deleted = get_datetime())
 
       # commit
       if (data$schedule$commit()) removeModal()

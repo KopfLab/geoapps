@@ -44,7 +44,7 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
     data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
     report_error = report_error,  reload_data = reload_data,
     sheet = "not_teaching",
-    cols = c("term", "instructor_id", "reason", "deleted" = "logical")
+    cols = c("term", "instructor_id", "reason", "created" = "datetime", "deleted" = "datetime")
   )
 
   # schedule
@@ -53,7 +53,7 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
     data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
     report_error = report_error,  reload_data = reload_data,
     sheet = "schedule",
-    cols = c("term", "class", "section", "subtitle", "instructor_id", "enrollment" = "integer", "enrollment_cap" = "integer", "building", "room", "days", "start_time", "end_time", "deleted" = "logical", "canceled" = "logical", "confirmed" = "logical")
+    cols = c("term", "class", "section", "subtitle", "instructor_id", "enrollment" = "integer", "enrollment_cap" = "integer", "building", "room", "days", "start_time", "end_time", "created" = "datetime", "updated" = "datetime", "deleted" = "datetime", "canceled" = "logical", "confirmed" = "logical")
   )
 
   # (re-) load data event =====

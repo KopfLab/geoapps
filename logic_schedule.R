@@ -34,10 +34,8 @@ prepare_not_teaching <- function(not_teaching) {
       .by = c("instructor_id", "term"),
       dplyr::row_number() == dplyr::n()
     ) |>
-    # define deleted properly
-    dplyr::mutate(deleted = !is.na(.data$deleted) & .data$deleted) |>
     # remove deleted records
-    dplyr::filter(!.data$deleted)
+    dplyr::filter(is.na(.data$deleted))
 }
 
 prepare_schedule <- function(schedule) {
@@ -54,7 +52,6 @@ prepare_schedule <- function(schedule) {
       class = stringr::str_remove_all(class, "[ \\r\\n]"),
       instructor_id = stringr::str_remove_all(instructor_id, "[ \\r\\n]"),
       canceled = !is.na(.data$canceled) & .data$canceled,
-      deleted = !is.na(.data$deleted) & .data$deleted,
       confirmed = !is.na(.data$confirmed) & .data$confirmed
     ) |>
     dplyr::mutate(
@@ -62,7 +59,7 @@ prepare_schedule <- function(schedule) {
                              .data$instructor_id, "none")
     ) |>
     # remove deleted records
-    dplyr::filter(!.data$deleted)
+    dplyr::filter(is.na(.data$deleted))
 }
 
 prepare_rooms <- function(schedule) {
@@ -87,6 +84,13 @@ prepare_teaching_times <- function(schedule) {
     dplyr::arrange(.data$days, .data$time) |>
     dplyr::mutate(label = sprintf("%s: %s-%s", .data$days, .data$start_time, .data$end_time)) |>
     dplyr::pull("label")
+}
+
+# FIXME: timezone hardcoded for this application
+get_datetime <- function(tz = "America/Denver") {
+  lubridate::now() |>
+    lubridate::with_tz(tz) |>
+    lubridate::force_tz("UTC")
 }
 
 # terms =======
@@ -293,10 +297,12 @@ combine_schedule <- function(
     dplyr::bind_rows(
       # actual schedule (except deleted records)
       schedule |>
-        dplyr::filter(!.data$deleted),
+        dplyr::filter(is.na(.data$deleted)) |>
+        dplyr::select(-"created", -"updated", -"deleted"),
       # not teaching (except deleted records)
       not_teaching |>
-        dplyr::filter(!.data$deleted) |>
+        dplyr::filter(is.na(.data$deleted)) |>
+        dplyr::select(-"created", -"deleted") |>
         dplyr::mutate(class = "XXXX0000"),
       # inactive (to flag as NOT teaching)
       instructors |>
