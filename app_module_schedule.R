@@ -664,7 +664,7 @@ module_schedule_server <- function(input, output, session, data) {
     )
   })
   observeEvent(input$class_id, {
-    shinyjs::toggle("subtitle", condition = stringr::str_detect(input$class_id, "4700|5700"))
+    shinyjs::toggle("subtitle", condition = stringr::str_detect(input$class_id, "new|4700|5700"))
   })
 
   # add class =========
@@ -687,7 +687,7 @@ module_schedule_server <- function(input, output, session, data) {
   toggle_save_class_add <- reactive({
     return(
         nchar(input$class_instructor_id) > 0 && nchar(input$class_term) > 0 && nchar(input$class_id) > 0 &&
-        (!stringr::str_detect(input$class_id, "4700|5700") || nchar(input$subtitle) > 0)
+        (!stringr::str_detect(input$class_id, "new|4700|5700") || nchar(input$subtitle) > 0)
     )
   })
 
@@ -723,7 +723,7 @@ module_schedule_server <- function(input, output, session, data) {
       if (!is.null(input$class_instructor_id2))
         data_values$instructor_id <- c(data_values$instructor_id, input$class_instructor_id2) |> paste(collapse = ", ")
 
-      if (stringr::str_detect(input$class_id, "4700|5700") && nchar(input$subtitle) > 0)
+      if (stringr::str_detect(input$class_id, "new|4700|5700") && nchar(input$subtitle) > 0)
         data_values$subtitle <- input$subtitle
 
       if (nchar(input$section) > 0)
