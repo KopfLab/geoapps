@@ -453,8 +453,9 @@ module_schedule_server <- function(input, output, session, data) {
   add_leave_dialog_inputs <- reactive({
     log_debug(ns = ns, "generating leave dialog inputs")
     tagList(
+      h4("Please indicate which upcoming semester you do not plan to teach."),
       if (!is.null(values$instructor_id)) {
-        h4(values$instructor$full_name)
+        h3(values$instructor$full_name)
       } else {
         # super user only?
         selectizeInput(
@@ -598,6 +599,7 @@ module_schedule_server <- function(input, output, session, data) {
 
     # first block
     tagList(
+      h4("Please add your planned classes. You do NOT need to add recitations or labs linked to your classes as those will be carried over by the UPA."),
       fluidRow(
         column(
           width = 6,
