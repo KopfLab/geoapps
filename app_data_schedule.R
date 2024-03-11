@@ -5,7 +5,6 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
 
   # namespace
   ns <- session$ns
-  local_path <- "local_data_schedule.xlsx"
 
   # reactive values =========
   values <- reactiveValues(
@@ -58,6 +57,9 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
 
   # (re-) load data event =====
   reload_data <- function() {
+    # enforce reload even for dev mode
+    if (is_dev_mode() && file.exists(get_local_path()))
+      file.remove(get_local_path())
     values$load_data <- values$load_data + 1L
   }
   observeEvent(input$reload, reload_data())
@@ -71,15 +73,15 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
     values$file_path <-
       tryCatch({
         # don't download from scratch every time if in development mode
-        if (is_dev_mode() && file.exists(local_path)) {
-          file_path <- local_path
+        if (is_dev_mode() && file.exists(get_local_path())) {
+          file_path <- get_local_path()
           log_debug(ns = ns, "in DEV mode, using local data file")
         } else
           file_path <- download_gs(data_sheet_id, gs_key_file = gs_key_file)
 
         # save locally if in dev mode
-        if (is_dev_mode() && !file.exists(local_path)) {
-          file.copy(file_path, local_path)
+        if (is_dev_mode() && !file.exists(get_local_path())) {
+          file.copy(file_path, get_local_path())
           log_debug(ns = ns, "in DEV mode, saving downloaded data to local file")
         }
         file_path

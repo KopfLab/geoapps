@@ -272,12 +272,15 @@ module_schedule_server <- function(input, output, session, data) {
               style = "position: absolute; right: 10px; top: 5px;",
               # add class
               actionButton(ns("add_class"), "Schedule Class", icon = icon("person-chalkboard"), style = "border: 0;") |>
+                add_tooltip("Add a class to your teaching plan.") |>
                 shinyjs::hidden(),
               # edit class
               actionButton(ns("edit_class"), "Edit Schedule", icon = icon("pen-to-square"), style = "border: 0;") |>
+                add_tooltip("Editing the schedule is not yet implemented.") |>
                 shinyjs::disabled() |> shinyjs::hidden(),
               # delete class
               actionButton(ns("delete_class"), "Unschedule", icon = icon("xmark"), style = "border: 0;") |>
+                add_tooltip("Delete ALL sections of this class.") |>
                 shinyjs::disabled() |> shinyjs::hidden(),
               # add absence
               actionButton(ns("add_leave"), "Add Absence", icon = icon("plane"), style = "border: 0;") |>
@@ -399,42 +402,50 @@ module_schedule_server <- function(input, output, session, data) {
     shinyjs::disable("edit_class")
     shinyjs::disable("delete_class")
 
-    # make sure something is selected
-    req(schedule$get_selected_ids())
-    log_debug(ns = ns, "new cell selected")
-
-    # build the edit information
-    values$edit <- list(
-      instructor_id = schedule$get_selected_items()$instructor_id,
-      instructor = schedule$get_selected_items()$Instructor,
-      class = as.character(schedule$get_selected_items()$class),
-      term = as.character(schedule$get_selected_cells()),
-      info = schedule$get_selected_items()[[as.character(schedule$get_selected_cells())]]
-    )
-
-    # check if it is a future record and if it is the instructor who is selected
-    # (unless in dev mode which could become an admin mode feature)
-    if (
-      is_term_after(values$edit$term) &&
-      ((is.null(values$instructor_id) && is_dev_mode()) || identical(values$instructor_id, values$edit$instructor_id))
-    ) {
-
-      # check which kind of record it is
-      if (values$edit$info %in% c("no", "?")) {
-        # unscheduled class
-        log_debug(ns = ns, "selected an unscheduled class")
+    # process selection
+    if (rlang::is_empty(schedule$get_selected_ids())) {
+      # nothing selected, enable just the add class button if an instructor is selected (or in dev mode)
+      log_debug(ns = ns, "nothing selected")
+      values$edit <- list()
+      if (is_dev_mode() || !is.null(values$instructor_id))
         shinyjs::enable("add_class")
-      } else if (values$edit$info %in% get_reasons()) {
-        # absence record
-        log_debug(ns = ns, "selected a teaching absence cell")
-        shinyjs::enable("delete_leave")
-      } else if (stringr::str_detect(values$edit$info, "^<i>")) {
-        # selected an unconfirmed scheduled class
-        log_debug(ns = ns, "selected an editable class")
-        shinyjs::enable("edit_class")
-        shinyjs::enable("delete_class")
-      }
+    } else if (check_terms(as.character(schedule$get_selected_cells()))) {
+      # something selected that's a valid term, figure out what to enable
+      log_debug(ns = ns, "new cell selected")
 
+      # build the edit information
+      values$edit <- list(
+        instructor_id = schedule$get_selected_items()$instructor_id,
+        instructor = schedule$get_selected_items()$Instructor,
+        class = as.character(schedule$get_selected_items()$class),
+        term = as.character(schedule$get_selected_cells()),
+        info = schedule$get_selected_items()[[as.character(schedule$get_selected_cells())]]
+      )
+
+      # check if it is a future record and if it is the instructor who is selected
+      # (unless in dev mode which could become an admin mode feature)
+      if (
+        is_term_after(values$edit$term) &&
+        ((is.null(values$instructor_id) && is_dev_mode()) || identical(values$instructor_id, values$edit$instructor_id))
+      ) {
+
+        # allow adding other classes (even if already one there or a teaching absence)
+        shinyjs::enable("add_class")
+
+        if (values$edit$info %in% get_reasons()) {
+          # enable delete for absence record
+          log_debug(ns = ns, "selected a teaching absence cell")
+          shinyjs::enable("delete_leave")
+        } else if (stringr::str_detect(values$edit$info, "^<i>")) {
+          # enable edit/delete for unconfirmed class
+          log_debug(ns = ns, "selected an editable class")
+          shinyjs::enable("edit_class")
+          shinyjs::enable("delete_class")
+        }
+      }
+    } else {
+      # all other scenarios
+      values$edit <- list()
     }
   })
 
@@ -567,8 +578,6 @@ module_schedule_server <- function(input, output, session, data) {
 
   # add class dialog =========
   add_class_dialog_inputs <- reactive({
-    req(schedule$get_selected_ids())
-    req(values$edit)
     log_debug(ns = ns, "generating class dialog inputs")
 
     # instructor selectize
@@ -577,7 +586,10 @@ module_schedule_server <- function(input, output, session, data) {
         ns("class_instructor_id"), "Instructor",
         multiple = FALSE,
         choices = c("Select instructor" = "", get_active_geol_instructors()),
-        selected = values$edit$instructor_id
+        selected =
+          if (!is.null(values$edit$instructor_id)) values$edit$instructor_id
+          else if (!is.null(values$instructor_id)) values$instructor_id
+          else 1L
       )
 
     if (!is.null(values$instructor_id) || !is_dev_mode()) {
@@ -594,7 +606,7 @@ module_schedule_server <- function(input, output, session, data) {
             ns("class_term"), "Term",
             multiple = FALSE,
             choices = c("Select term" = "", get_sorted_terms(get_future_terms())),
-            selected = values$edit$term
+            selected = if(!is.null(values$edit$term)) values$edit$term else 1L
           )
         ),
         column(
@@ -608,7 +620,7 @@ module_schedule_server <- function(input, output, session, data) {
             ns("class_id"), "Class",
             multiple = FALSE,
             choices = c("Select class" = "", levels(get_classes()$class)),
-            selected = values$edit$class
+            selected = if(!is.null(values$edit$class)) values$edit$class else 1L
           ),
           textInput(
             ns("subtitle"), "Special Topics Title",
@@ -662,20 +674,24 @@ module_schedule_server <- function(input, output, session, data) {
       title = "Schedule Class",
       add_class_dialog_inputs(),
       footer = tagList(
-        actionButton(ns("save_class"), "Add") |> shinyjs::disabled(),
+        actionButton(ns("save_class"), "Add"),
         modalButton("Cancel")
       )
     )
     showModal(dlg)
+    shinyjs::toggleState("save_class", condition = toggle_save_class_add())
   })
 
-  observe({
-    shinyjs::toggleState(
-      "save_class",
-      condition = (!is.null(values$instructor_id) || nchar(input$class_instructor_id) > 0) &&
-        nchar(input$class_term) > 0 && nchar(input$class_id) > 0 &&
+  toggle_save_class_add <- reactive({
+    return(
+        nchar(input$class_instructor_id) > 0 && nchar(input$class_term) > 0 && nchar(input$class_id) > 0 &&
         (!stringr::str_detect(input$class_id, "4700|5700") || nchar(input$subtitle) > 0)
     )
+  })
+
+  observeEvent(toggle_save_class_add(), {
+    req(isolate(input$add_class))
+    shinyjs::toggleState("save_class", condition = toggle_save_class_add())
   })
 
   # save class =====

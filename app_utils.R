@@ -11,6 +11,10 @@ is_dev_mode <- function() {
   return(identical(Sys.getenv("GEOPATHS_DEV"), "ON"))
 }
 
+get_local_path <- function() {
+  return("local_data_schedule.xlsx")
+}
+
 omit_duplicates <- function(x) {
   x[!duplicated(x)]
 }
