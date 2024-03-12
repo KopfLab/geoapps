@@ -660,6 +660,9 @@ module_schedule_server <- function(input, output, session, data) {
             choices = c("No preference" = "", get_teaching_times())
           ),
         )
+      ),
+      fluidRow(
+        column(width = 12, textAreaInput(ns("notes"), "Notes", width = "100%", placeholder = "Enter any notes for the UPA"))
       )
     )
   })
@@ -716,7 +719,8 @@ module_schedule_server <- function(input, output, session, data) {
         else input$class_instructor_id,
         class = input$class_id,
         created = get_datetime(),
-        confirmed = FALSE
+        confirmed = FALSE,
+        notes = input$notes
       )
 
       # optional details
