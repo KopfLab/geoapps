@@ -404,11 +404,10 @@ module_schedule_server <- function(input, output, session, data) {
 
     # process selection
     if (rlang::is_empty(schedule$get_selected_ids())) {
-      # nothing selected, enable just the add class button if an instructor is selected (or in dev mode)
+      # nothing selected, enable just the add class button
       log_debug(ns = ns, "nothing selected")
       values$edit <- list()
-      if (is_dev_mode() || !is.null(values$instructor_id))
-        shinyjs::enable("add_class")
+      shinyjs::enable("add_class")
     } else if (check_terms(as.character(schedule$get_selected_cells()))) {
       # something selected that's a valid term, figure out what to enable
       log_debug(ns = ns, "new cell selected")
