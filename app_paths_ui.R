@@ -1,11 +1,10 @@
-
 # user interface
-schedule_ui <- function() {
+paths_ui <- function() {
 
   # constants
-  app_title <- "Geoschedule"
+  app_title <- "Geopaths"
   app_title_width <- 150
-  app_color <- "yellow"
+  app_color <- "green"
   spinner_color <- "#2c3b41"
   app_box_default <- "#2c3b41"
 
@@ -18,7 +17,7 @@ schedule_ui <- function() {
   # sidebar
   sidebar <-
     shinydashboard::dashboardSidebar(
-      collapsed = FALSE, disable = FALSE, width = app_title_width,
+      collapsed = TRUE, disable = TRUE,
       shinyjs::useShinyjs(), # enable shinyjs
       shinytoastr::useToastr(), # enable toaster
       prompter::use_prompt(), # enable prompter
@@ -34,15 +33,13 @@ schedule_ui <- function() {
             sprintf(".box.box-solid.box-info{border:1px solid %s;}", app_box_default),
             sep="\n"))
         )
-      ),
-      module_data_schedule_reload_button("schedule_data"),
-      module_schedule_sidebar("schedule"),
-      if (is_dev_mode()) actionButton("dev_mode_toggle", "Toggle Dev Mode")
+      )
     )
 
   # body
   body <- shinydashboard::dashboardBody(
-    module_schedule_ui("schedule")
+    module_data_paths_reload_button("paths_data"),
+    module_paths_ui("paths")
   )
 
   # dashboard page
