@@ -18,4 +18,3 @@ source("app_module_paths.R")
 source("credentials.R")
 
 app <- shinyApp(paths_ui(), paths_server(paths_gs_id, key_file))
-app

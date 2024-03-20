@@ -18,4 +18,3 @@ source("app_module_schedule.R")
 source("credentials.R")
 
 app <- shinyApp(schedule_ui(), schedule_server(schedule_gs_id, key_file))
-app
