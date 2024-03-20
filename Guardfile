@@ -7,7 +7,8 @@
 # manually restart guard instead when chaning namespace
 
 guard 'process', name: 'Shiny', command: ['R', '-e', " \
-rm(list = ls()); Sys.setenv('LOG_LEVEL' = 'DEBUG'); Sys.setenv('GEOPATHS_DEV'= 'ON'); shiny::runApp('app.R', port = 4446)"] do
+rm(list = ls()); Sys.setenv('LOG_LEVEL' = 'DEBUG'); Sys.setenv('GEOAPPS_DEV'= 'ON'); shiny::runApp('app_schedule.R', port = 4446)"] do
+#rm(list = ls()); Sys.setenv('LOG_LEVEL' = 'DEBUG'); Sys.setenv('GEOAPPS_DEV'= 'ON'); shiny::runApp('app_paths.R', port = 4446)"] do
   watch(%r{.+\.R$})
 end
 

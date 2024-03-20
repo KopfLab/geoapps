@@ -7,14 +7,6 @@
   return(out)
 }
 
-is_dev_mode <- function() {
-  return(identical(Sys.getenv("GEOPATHS_DEV"), "ON"))
-}
-
-get_local_path <- function() {
-  return("local_data_schedule.xlsx")
-}
-
 omit_duplicates <- function(x) {
   x[!duplicated(x)]
 }
@@ -28,6 +20,9 @@ factor_in_order <- function(x) {
   return(factor(x, levels = levels(x)[idx]))
 }
 
+is_dev_mode <- function() {
+  return(identical(Sys.getenv("GEOAPPS_DEV"), "ON"))
+}
 
 # logging utilities ====
 # note: fatal and trace are overkill for this app
@@ -56,7 +51,7 @@ log_error <- function(..., ns = NULL, user_msg = NULL, error = NULL) {
     if (getPackageName() != ".GlobalEnv") packageVersion(getPackageName()) else "app", user_msg
   )
   issue_url <- sprintf(
-    "https://github.com/KopfLab/geopaths/issues/new?title=%s&body=%s",
+    "https://github.com/KopfLab/geoapps/issues/new?title=%s&body=%s",
     URLencode(issue_title), URLencode(HTML(error_msg))
   )
 
