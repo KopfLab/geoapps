@@ -18,7 +18,7 @@ RUN install2.r -r http://cran.rstudio.com/ \
   readr \
   readxl \
   gargle \
-  googledrive \ 
+  googledrive \
   googlesheets4
 
 # install UI packages
@@ -30,7 +30,11 @@ RUN install2.r -r http://cran.rstudio.com/ \
   shinycssloaders \
   rlog \
   prompter \
-  DT  
+  DT
+
+# install lubridate
+RUN install2.r -r http://cran.rstudio.com/ \
+  lubridate
 
 # provide an argument to be set from built to restart build from here
 ARG refresh=unknown
