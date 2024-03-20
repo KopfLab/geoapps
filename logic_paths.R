@@ -1,3 +1,5 @@
+source("logic_terms.R")
+
 # data functions ======
 
 # convenience function to fill down columns

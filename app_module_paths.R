@@ -4,7 +4,18 @@ module_paths_server <- function(input, output, session, data) {
   # namespace
   ns <- session$ns
 
+  # reactive values
+  values <- reactiveValues(
+    last_term = NULL
+  )
+
   # data functions ===========
+
+  # available terms
+  get_terms <- function() {
+    get_current_term() |>
+      get_available_terms(n_years_past_current = 2)
+  }
 
   # get upper division classes
   get_ud_classes <- reactive({
@@ -47,15 +58,36 @@ module_paths_server <- function(input, output, session, data) {
   })
 
   # generate UI =====================
-  output$main <- renderUI({
-    req(get_paths())
-    log_info("loading list")
+
+  # sidebar GUI
+  output$sidebar <- renderUI({
+    req(get_terms())
+    log_info("generating sidebar")
+    terms <- get_terms() |> drop_summers()
     tagList(
       selectInput(
         ns("path"), "Select path:",
         choices = c("Select path" = "", get_paths_list()),
         selected = if (is_dev_mode()) get_paths_list()[1] else NULL
       ),
+      selectizeInput(
+        ns("last_term"), "Show terms to:",
+        multiple = FALSE,
+        choices = get_sorted_terms(terms),
+        selected =
+          isolate({
+            if (!is.null(values$last_term) && values$last_term %in% terms) values$last_term
+            else get_past_or_future_term(years_shift = +2)
+          })
+      )
+    )
+  })
+
+  # main GUI
+  output$main <- renderUI({
+    req(get_paths())
+    log_info("loading list")
+    tagList(
       div(id = ns("path_box"),
           shinydashboard::box(
             title =
@@ -136,6 +168,12 @@ module_paths_server <- function(input, output, session, data) {
   )
 
 
+}
+
+# load UI dynamically
+module_path_sidebar <- function(id) {
+  ns <- NS(id)
+  uiOutput(ns("sidebar"))
 }
 
 # load UI dynamically

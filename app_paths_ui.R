@@ -17,7 +17,7 @@ paths_ui <- function() {
   # sidebar
   sidebar <-
     shinydashboard::dashboardSidebar(
-      collapsed = TRUE, disable = TRUE,
+      collapsed = FALSE, disable = FALSE, width = app_title_width,
       shinyjs::useShinyjs(), # enable shinyjs
       shinytoastr::useToastr(), # enable toaster
       prompter::use_prompt(), # enable prompter
@@ -33,12 +33,14 @@ paths_ui <- function() {
             sprintf(".box.box-solid.box-info{border:1px solid %s;}", app_box_default),
             sep="\n"))
         )
-      )
+      ),
+      module_data_paths_reload_button("paths_data"),
+      module_path_sidebar("paths"),
+      if (is_dev_mode()) actionButton("dev_mode_toggle", "Toggle Dev Mode")
     )
 
   # body
   body <- shinydashboard::dashboardBody(
-    module_data_paths_reload_button("paths_data"),
     module_paths_ui("paths")
   )
 

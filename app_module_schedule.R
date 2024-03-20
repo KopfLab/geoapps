@@ -7,7 +7,7 @@ module_schedule_server <- function(input, output, session, data) {
   # constants
   data_err_prefix <- "Encountered database issue, the app may not function properly: "
 
-  # reactive vaalues
+  # reactive values
   values <- reactiveValues(
     first_term = NULL,
     last_term = NULL,
