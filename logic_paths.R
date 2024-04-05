@@ -114,6 +114,7 @@ prepare_path_classes <- function(paths, selected_path, classes) {
 combine_path_classes_with_schedule <- function(path_classes, schedule, selected_terms) {
   schedule_wide <-
     schedule |>
+    dplyr::filter(term %in% !!selected_terms) |>
     dplyr::mutate(info = "yes") |>
     dplyr::slice_head(n = 1L, by = c("term", "class")) |>
     tidyr::pivot_wider(id_cols = c(class), names_from = term, values_from = info)
@@ -122,7 +123,7 @@ combine_path_classes_with_schedule <- function(path_classes, schedule, selected_
     dplyr::left_join(schedule_wide, by = "class") |>
     dplyr::mutate(
       dplyr::across(
-        dplyr::any_of(selected_terms),
+        dplyr::any_of(!!selected_terms),
         ~dplyr::case_when(
           !is.na(.x) ~ .x,
           .data$program != "GEOL" ~ "?",

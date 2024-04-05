@@ -39,10 +39,8 @@ module_paths_server <- function(input, output, session, data) {
   # schedule
   get_schedule <- reactive({
     req(data$schedule$get_data())
-    req(get_selected_terms())
     schedule <-
-      prepare_schedule(data$schedule$get_data()) |>
-      dplyr::filter(term %in% get_selected_terms())
+      prepare_schedule(data$schedule$get_data())
     return(schedule)
   })
 
@@ -78,10 +76,12 @@ module_paths_server <- function(input, output, session, data) {
     req(get_classes())
     req(get_schedule())
     req(get_selected_terms())
-    log_info(ns = ns, "loading path", user_msg = sprintf("Loading %s path", get_selected_path()))
+    # always reset visible columns to load new selection
+    classes$reset_visible_columns()
+    log_info(ns = ns, "loading path with terms: ", paste(get_selected_terms(), collapse = ", "), user_msg = sprintf("Loading %s path", get_selected_path()))
     get_paths() |>
       prepare_path_classes(selected_path = get_selected_path(), classes = get_classes()) |>
-      combine_path_classes_with_schedule(get_schedule(), get_selected_terms()) |>
+      combine_path_classes_with_schedule(get_schedule(), selected_terms = get_selected_terms()) |>
       prepare_path_classes_table_columns()
   })
 
