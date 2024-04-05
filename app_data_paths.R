@@ -12,7 +12,6 @@ module_data_paths_server <- function(input, output, session, data_sheet_id, gs_k
     file_path = NULL,
     error = FALSE
   )
-  local_path <- "local_data_paths.xlsx"
 
   # data tables =========
   get_local_file <- reactive({ values$file_path })
@@ -26,7 +25,7 @@ module_data_paths_server <- function(input, output, session, data_sheet_id, gs_k
     data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
     report_error = report_error,  reload_data = reload_data,
     sheet = "classes",
-    cols = c("class", "title", "credits" = "integer", "Spring 2023", "Fall 2023", "Spring 2024", "Fall 2024")
+    cols = c("class", "title", "credits" = "integer", "inactive" = "logical")
   )
 
   # path recommendations
@@ -38,8 +37,20 @@ module_data_paths_server <- function(input, output, session, data_sheet_id, gs_k
     cols = c("path", "category", "category_description", "rec_min", "class", "reason")
   )
 
+  # schedule
+  schedule <- callModule(
+    module_data_table_server, id = "schedule",
+    data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
+    report_error = report_error,  reload_data = reload_data,
+    sheet = "schedule",
+    cols = c("term", "class", "section", "subtitle", "instructor_id", "enrollment_cap" = "integer", "building", "room", "days", "start_time", "end_time", "deleted" = "datetime", "canceled" = "logical", "confirmed" = "logical", "notes")
+  )
+
   # (re-) load data event =====
   reload_data <- function() {
+    # enforce reload even for dev mode
+    if (is_dev_mode() && file.exists(get_local_path()))
+      file.remove(get_local_path())
     values$load_data <- values$load_data + 1L
   }
   observeEvent(input$reload, reload_data())
@@ -53,15 +64,15 @@ module_data_paths_server <- function(input, output, session, data_sheet_id, gs_k
     values$file_path <-
       tryCatch({
         # don't download from scratch every time if in development mode
-        if (is_dev_mode() && file.exists(local_path)) {
-          file_path <- local_path
+        if (is_dev_mode() && file.exists(get_local_path())) {
+          file_path <- get_local_path()
           log_debug(ns = ns, "in DEV mode, using local data file")
         } else
           file_path <- download_gs(data_sheet_id, gs_key_file = gs_key_file)
 
         # save locally if in dev mode
-        if (is_dev_mode() && !file.exists(local_path)) {
-          file.copy(file_path, local_path)
+        if (is_dev_mode() && !file.exists(get_local_path())) {
+          file.copy(file_path, get_local_path())
           log_debug(ns = ns, "in DEV mode, saving downloaded data to local file")
         }
         file_path
@@ -83,6 +94,7 @@ module_data_paths_server <- function(input, output, session, data_sheet_id, gs_k
     tryCatch({
       classes$read_data(ignore_other_cols = TRUE)
       paths$read_data(ignore_other_cols = TRUE)
+      schedule$read_data(ignore_other_cols = TRUE)
     },
     error = function(e) {
       log_error(ns = ns, "data read failed", user_msg = "Data reading error", error = e)
@@ -133,7 +145,8 @@ module_data_paths_server <- function(input, output, session, data_sheet_id, gs_k
     reload_data = reload_data,
     is_authenticated = is_authenticated,
     classes = classes,
-    paths = paths
+    paths = paths,
+    schedule = schedule
   )
 }
 

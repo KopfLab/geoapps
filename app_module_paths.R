@@ -4,6 +4,9 @@ module_paths_server <- function(input, output, session, data) {
   # namespace
   ns <- session$ns
 
+  # constants
+  data_err_prefix <- "Encountered database issue, the app may not function properly: "
+
   # reactive values
   values <- reactiveValues(
     last_term = NULL
@@ -14,25 +17,46 @@ module_paths_server <- function(input, output, session, data) {
   # available terms
   get_terms <- function() {
     get_current_term() |>
-      get_available_terms(n_years_past_current = 2)
+      get_available_terms(n_years_past_current = 5)
   }
 
-  # get upper division classes
-  get_ud_classes <- reactive({
-    validate(need(data$classes$get_data(), "something went wrong retrieving the data"))
-    data$classes$get_data() |>
-      dplyr::select(-".rowid", -".add", -".update", -".delete") |>
-      get_unique_classes() |>
-      get_classes_above_level(level = 3000) |>
-      complete_semester_availabilities()
+  # monitor last term
+  observeEvent(input$last_term, {
+    if (is.null(values$last_term) || !identical(values$last_term, input$last_term))
+      values$last_term <- input$last_term
+  })
+
+  # selected terms
+  get_selected_terms <- reactive({
+    req(get_terms())
+    req(values$last_term)
+    terms <- get_terms() |> filter_terms(end_term = values$last_term)
+    # check if summers should be shown (checkbox?)
+    terms <- terms |> drop_summers()
+    return(terms)
+  })
+
+  # schedule
+  get_schedule <- reactive({
+    req(data$schedule$get_data())
+    req(get_selected_terms())
+    schedule <-
+      prepare_schedule(data$schedule$get_data()) |>
+      dplyr::filter(term %in% get_selected_terms())
+    return(schedule)
+  })
+
+  # classes
+  get_classes <- reactive({
+    req(data$classes$get_data())
+    prepare_classes(data$classes$get_data())
   })
 
   # get path recommendations
   get_paths <- reactive({
     validate(need(data$paths$get_data(), "something went wrong retrieving the data"))
     data$paths$get_data() |>
-      dplyr::select(-".rowid", -".add", -".update", -".delete") |>
-      prep_path_recommendations()
+      prepare_path_recommendations()
   })
 
   # get path names
@@ -47,14 +71,18 @@ module_paths_server <- function(input, output, session, data) {
     input$path
   })
 
-  # get classes
-  get_classes <- reactive({
-    req(get_selected_path())
+  # path for table
+  get_path_for_table <- reactive({
     req(get_paths())
-    req(get_ud_classes())
+    req(get_selected_path())
+    req(get_classes())
+    req(get_schedule())
+    req(get_selected_terms())
     log_info(ns = ns, "loading path", user_msg = sprintf("Loading %s path", get_selected_path()))
-    get_path_classes(input$path, get_paths(), get_ud_classes()) |>
-      dplyr::mutate(id = .data$class)
+    get_paths() |>
+      prepare_path_classes(selected_path = get_selected_path(), classes = get_classes()) |>
+      combine_path_classes_with_schedule(get_schedule(), get_selected_terms()) |>
+      prepare_path_classes_table_columns()
   })
 
   # generate UI =====================
@@ -103,7 +131,10 @@ module_paths_server <- function(input, output, session, data) {
                 )
               ), width = 12,
             status = "info", solidHeader = TRUE,
-            module_selector_table_ui(ns("classes"))
+            module_selector_table_ui(ns("classes")),
+            footer = tagList(
+              "Use the search bar in the upper right to filter the recommended classes (e.g. by course number or course name)."
+            )
           )
       ) |> shinyjs::hidden()
     )
@@ -123,50 +154,39 @@ module_paths_server <- function(input, output, session, data) {
   }, ignoreNULL = FALSE)
 
   # classes table ======
-  # FIXME: this needs to be dynamic re. columns, coloring etc.
   classes <- callModule(
     module_selector_table_server,
     "classes",
-    get_data = get_classes,
-    id_column = "id",
-    available_columns = list(
-      Category =
-        ifelse(
-          !is.na(category_description),
-          sprintf("%s<br/><i>%s</i>",
-                  htmltools::htmlEscape(category_info),
-                  htmltools::htmlEscape(category_description)),
-          htmltools::htmlEscape(category_info)
-        ),
-      Class = sprintf("%s(%s)", class, credits),
-      Title = title,
-      `Relevance for this path` = reason,
-      `Spring 2023`, `Fall 2023`, `Spring 2024`, `Fall 2024`
+    get_data = get_path_for_table,
+    id_column = "row",
+    # row grouping
+    render_html = "Category",
+    extensions = "RowGroup",
+    rowGroup = list(dataSrc = 1),
+    columnDefs = list(
+      list(visible = FALSE, targets = 0:1)
     ),
+    # view all & scrolling
     allow_view_all = TRUE,
     initial_page_length = -1,
     dom = "ft",
-    selection = "multiple",
-    # row grouping
-    render_html = "Category",
-    extensions = c("RowGroup", "FixedHeader"),
-    rowGroup = list(dataSrc = 0),
-    columnDefs = list(list(visible = FALSE, targets = 0)),
-    # scrolling
+    ordering = FALSE,
     scrollX = TRUE,
-    fixedHeader = TRUE,
+    scrollY = "calc(100vh - 300px)", # account for size of header with the -x px
+    selection = "multiple",
     # formatting
     formatting_calls = list(
       list(
-        func = DT::formatStyle, columns = c("Spring 2023", "Fall 2023", "Spring 2024", "Fall 2024"),
+        func = DT::formatStyle,
+        columns_expr = expr(dplyr::matches(get_term_regexp())),
         backgroundColor = DT::styleEqual(
-          get_classes_teaching_info_placeholder() |> names(),
-          get_classes_teaching_info_placeholder() |> as.character()
+          levels = c("?", "no", "canceled"),
+          values = c("lightgray", "lightpink", "lightpink"),
+          default = "lightgreen"
         )
       )
     )
   )
-
 
 }
 
