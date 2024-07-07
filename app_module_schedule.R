@@ -7,7 +7,7 @@ module_schedule_server <- function(input, output, session, data) {
   # constants
   data_err_prefix <- "Encountered database issue, the app may not function properly: "
 
-  # reactive values
+  # reactive vaalues
   values <- reactiveValues(
     first_term = NULL,
     last_term = NULL,
@@ -225,7 +225,7 @@ module_schedule_server <- function(input, output, session, data) {
         selected =
           isolate({
             if (!is.null(values$first_term) && values$first_term %in% terms) values$first_term
-            else get_current_term()
+            else get_current_term(include_summer = FALSE)
           })
       ),
       selectizeInput(
@@ -235,7 +235,7 @@ module_schedule_server <- function(input, output, session, data) {
         selected =
           isolate({
             if (!is.null(values$last_term) && values$last_term %in% terms) values$last_term
-            else get_past_or_future_term(years_shift = +2)
+            else get_past_or_future_term(get_current_term(include_summer = FALSE), years_shift = +2)
           })
       ),
       selectizeInput(

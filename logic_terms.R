@@ -8,10 +8,11 @@ check_terms <- function(terms) {
   stringr::str_detect(terms, get_term_regexp())
 }
 
-get_current_term <- function() {
+get_current_term <- function(include_summer = TRUE) {
   month <- lubridate::month(lubridate::now())
   year <- lubridate::year(lubridate::now())
   season <- if (month >= 8) "Fall" else if (month >= 5) "Summer" else "Spring"
+  if (!include_summer && season == "Summer") season <- "Fall"
   return(paste(season, year))
 }
 
