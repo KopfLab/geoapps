@@ -69,10 +69,9 @@ module_schedule_server <- function(input, output, session, data) {
 
   # future terms
   get_future_terms <- reactive({
-    req(get_selected_terms())
-    terms <- get_selected_terms()
+    req(get_terms())
     # start in term after current
-    get_selected_terms() |>
+    get_terms() |>
       filter_terms(start_term = get_current_term(), inclusive = FALSE)
   })
 
