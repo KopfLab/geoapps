@@ -293,7 +293,7 @@ combine_schedule <- function(
         dplyr::mutate(instructor = forcats::as_factor(instructor) |>
                         # move these levels to the end
                         # FIXME: these are hard-coded at the moment
-                        forcats::fct_relevel("Other Instructor", "Postdoctoral Scholar", "Graduate Student", "Noone Assigned", after = Inf)) |>
+                        forcats::fct_relevel("Other Instructor", "Postdoctoral Scholar", "Graduate Student", "None Assigned", after = Inf)) |>
         dplyr::select("instructor_id", "instructor"),
       by = "instructor_id"
     ) |>
