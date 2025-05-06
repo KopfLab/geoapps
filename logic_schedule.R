@@ -54,7 +54,8 @@ prepare_schedule <- function(schedule) {
       class = stringr::str_remove_all(class, "[ \\r\\n]"),
       instructor_id = stringr::str_remove_all(instructor_id, "[ \\r\\n]"),
       canceled = !is.na(.data$canceled) & .data$canceled,
-      confirmed = !is.na(.data$confirmed) & .data$confirmed
+      confirmed = !is.na(.data$confirmed) & .data$confirmed,
+      room = .data$room |> stringr::str_remove("\\.\\d+$")
     ) |>
     dplyr::mutate(
       instructor_id = ifelse(!is.na(.data$instructor_id) & nchar(.data$instructor_id) > 0,
@@ -67,6 +68,9 @@ prepare_schedule <- function(schedule) {
 prepare_rooms <- function(schedule) {
   schedule |>
     dplyr::select("building", "room") |>
+    dplyr::mutate(
+      room = .data$room |> stringr::str_remove("\\.\\d+$")
+    ) |>
     dplyr::distinct() |>
     dplyr::filter(!is.na(.data$building), !is.na(.data$room)) |>
     dplyr::filter(.data$building == "BESC") |>

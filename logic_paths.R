@@ -51,7 +51,8 @@ prepare_schedule <- function(schedule) {
     dplyr::mutate(
       class = stringr::str_remove_all(class, "[ \\r\\n]"),
       canceled = !is.na(.data$canceled) & .data$canceled,
-      confirmed = !is.na(.data$confirmed) & .data$confirmed
+      confirmed = !is.na(.data$confirmed) & .data$confirmed,
+      room = .data$room |> stringr::str_remove("\\.\\d+$")
     ) |>
     # remove deleted and canceled records
     dplyr::filter(is.na(.data$deleted), !.data$canceled)
