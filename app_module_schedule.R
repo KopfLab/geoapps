@@ -122,13 +122,21 @@ module_schedule_server <- function(input, output, session, data) {
   # rooms
   get_rooms <- reactive({
     req(data$schedule$get_data())
-    data$schedule$get_data() |> prepare_rooms()
+    rooms <- data$schedule$get_data() |> prepare_rooms()
+    # make sure "other" is the first option
+    other_option <- "Other (see notes)"
+    rooms <- rooms[rooms != other_option]
+    c(other_option, rooms)
   })
 
   # teaching times
   get_teaching_times <- reactive({
     req(data$schedule$get_data())
-    data$schedule$get_data() |> prepare_teaching_times()
+    ttimes <- data$schedule$get_data() |> prepare_teaching_times()
+    # make sure "other" is the first option
+    other_option <- "Other (see notes)"
+    ttimes <- ttimes[ttimes != other_option]
+    c(other_option, ttimes)
   })
 
   # schedule
