@@ -49,7 +49,7 @@ module_data_paths_server <- function(input, output, session, data_sheet_id, gs_k
   # (re-) load data event =====
   reload_data <- function() {
     # enforce reload even for dev mode
-    if (is_dev_mode() && file.exists(get_local_path()))
+    if (shiny::in_devmode() && file.exists(get_local_path()))
       file.remove(get_local_path())
     values$load_data <- values$load_data + 1L
   }
@@ -64,14 +64,14 @@ module_data_paths_server <- function(input, output, session, data_sheet_id, gs_k
     values$file_path <-
       tryCatch({
         # don't download from scratch every time if in development mode
-        if (is_dev_mode() && file.exists(get_local_path())) {
+        if (shiny::in_devmode() && file.exists(get_local_path())) {
           file_path <- get_local_path()
           log_debug(ns = ns, "in DEV mode, using local data file")
         } else
           file_path <- download_gs(data_sheet_id, gs_key_file = gs_key_file)
 
         # save locally if in dev mode
-        if (is_dev_mode() && !file.exists(get_local_path())) {
+        if (shiny::in_devmode() && !file.exists(get_local_path())) {
           file.copy(file_path, get_local_path())
           log_debug(ns = ns, "in DEV mode, saving downloaded data to local file")
         }

@@ -191,7 +191,7 @@ module_data_table_server <- function(
     if (success) {
 
       # enfore reload even for dev mode
-      if (is_dev_mode() && file.exists(get_local_path()))
+      if (shiny::in_devmode() && file.exists(get_local_path()))
         file.remove(get_local_path())
 
       if (!any(values$data_changed$.add)) {

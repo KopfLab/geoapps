@@ -20,10 +20,6 @@ factor_in_order <- function(x) {
   return(factor(x, levels = levels(x)[idx]))
 }
 
-is_dev_mode <- function() {
-  return(identical(Sys.getenv("GEOAPPS_DEV"), "ON"))
-}
-
 # logging utilities ====
 # note: fatal and trace are overkill for this app
 

@@ -36,7 +36,7 @@ paths_ui <- function() {
       ),
       module_data_paths_reload_button("paths_data"),
       module_path_sidebar("paths"),
-      if (is_dev_mode()) actionButton("dev_mode_toggle", "Toggle Dev Mode")
+      if (shiny::in_devmode()) actionButton("dev_mode_toggle", "Toggle Dev Mode")
     )
 
   # body

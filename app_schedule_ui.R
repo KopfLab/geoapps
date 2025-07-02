@@ -3,7 +3,7 @@
 schedule_ui <- function() {
 
   # constants
-  app_title <- "Geoschedule"
+  app_title <- "GeoscheduleR"
   app_title_width <- 150
   app_color <- "yellow"
   spinner_color <- "#2c3b41"
@@ -37,7 +37,7 @@ schedule_ui <- function() {
       ),
       module_data_schedule_reload_button("schedule_data"),
       module_schedule_sidebar("schedule"),
-      if (is_dev_mode()) actionButton("dev_mode_toggle", "Toggle Dev Mode")
+      if (shiny::in_devmode()) actionButton("dev_mode_toggle", "Toggle Dev Mode")
     )
 
   # body

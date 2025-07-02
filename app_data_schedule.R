@@ -25,7 +25,7 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
     data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
     report_error = report_error,  reload_data = reload_data,
     sheet = "classes",
-    cols = c("class", "title", "credits" = "integer", "inactive" = "logical")
+    cols = c("class", "title", "credits" = "integer", "inactive" = "logical", "type")
   )
 
   # instructors
@@ -58,7 +58,7 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
   # (re-) load data event =====
   reload_data <- function() {
     # enforce reload even for dev mode
-    if (is_dev_mode() && file.exists(get_local_path()))
+    if (shiny::in_devmode() && file.exists(get_local_path()))
       file.remove(get_local_path())
     values$load_data <- values$load_data + 1L
   }
@@ -73,14 +73,14 @@ module_data_schedule_server <- function(input, output, session, data_sheet_id, g
     values$file_path <-
       tryCatch({
         # don't download from scratch every time if in development mode
-        if (is_dev_mode() && file.exists(get_local_path())) {
+        if (shiny::in_devmode() && file.exists(get_local_path())) {
           file_path <- get_local_path()
           log_debug(ns = ns, "in DEV mode, using local data file")
         } else
           file_path <- download_gs(data_sheet_id, gs_key_file = gs_key_file)
 
         # save locally if in dev mode
-        if (is_dev_mode() && !file.exists(get_local_path())) {
+        if (shiny::in_devmode() && !file.exists(get_local_path())) {
           file.copy(file_path, get_local_path())
           log_debug(ns = ns, "in DEV mode, saving downloaded data to local file")
         }

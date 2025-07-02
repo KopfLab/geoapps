@@ -46,11 +46,11 @@ module_schedule_server <- function(input, output, session, data) {
         values$instructor <- NULL
       }
     }
-    shinyjs::toggle("add_leave", condition = is_dev_mode() || !is.null(values$instructor_id))
-    shinyjs::toggle("delete_leave", condition = is_dev_mode() || !is.null(values$instructor_id))
-    shinyjs::toggle("add_class", condition = is_dev_mode() || !is.null(values$instructor_id))
-    shinyjs::toggle("edit_class", condition = is_dev_mode() || !is.null(values$instructor_id))
-    shinyjs::toggle("delete_class", condition = is_dev_mode() || !is.null(values$instructor_id))
+    shinyjs::toggle("add_leave", condition = shiny::in_devmode() || !is.null(values$instructor_id))
+    shinyjs::toggle("delete_leave", condition = shiny::in_devmode() || !is.null(values$instructor_id))
+    shinyjs::toggle("add_class", condition = shiny::in_devmode() || !is.null(values$instructor_id))
+    shinyjs::toggle("edit_class", condition = shiny::in_devmode() || !is.null(values$instructor_id))
+    shinyjs::toggle("delete_class", condition = shiny::in_devmode() || !is.null(values$instructor_id))
   })
 
   # selected terms
@@ -432,7 +432,7 @@ module_schedule_server <- function(input, output, session, data) {
       # (unless in dev mode which could become an admin mode feature)
       if (
         is_term_after(values$edit$term) &&
-        ((is.null(values$instructor_id) && is_dev_mode()) || identical(values$instructor_id, values$edit$instructor_id))
+        ((is.null(values$instructor_id) && shiny::in_devmode()) || identical(values$instructor_id, values$edit$instructor_id))
       ) {
 
         # allow adding other classes (even if already one there or a teaching absence)
@@ -599,7 +599,7 @@ module_schedule_server <- function(input, output, session, data) {
           else 1L
       )
 
-    if (!is.null(values$instructor_id) || !is_dev_mode()) {
+    if (!is.null(values$instructor_id) || !shiny::in_devmode()) {
       instructor_input <- instructor_input |> shinyjs::disabled()
     }
 
