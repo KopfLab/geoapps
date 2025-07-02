@@ -299,13 +299,14 @@ combine_schedule <- function(
     ) |>
     # add class details
     dplyr::left_join(
-      classes |> dplyr::select("class", "title", "credits", "inactive"),
+      classes |> dplyr::select("class", "title", "credits", "inactive", "type"),
       by = "class"
     ) |>
     dplyr::mutate(
       full_title =
         sprintf("%s (%.0f) - %s", class, credits, title) |>
         paste0(ifelse(!is.na(subtitle), sprintf(": %s", subtitle), "")) |>
+        paste0(ifelse(!is.na(type), sprintf(" (%s)", toupper(type)), "")) |>
         paste0(ifelse(inactive, " (inactive)", ""))
     )
 

@@ -3,7 +3,7 @@
 schedule_ui <- function() {
 
   # constants
-  app_title <- "GeoscheduleR"
+  app_title <- "Geoschedule"
   app_title_width <- 150
   app_color <- "yellow"
   spinner_color <- "#2c3b41"

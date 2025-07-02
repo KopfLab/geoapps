@@ -1,7 +1,6 @@
 # server
 schedule_server <- function(data_sheet_id, gs_key_file) {
-
-  shinyServer(function(input, output, session) {
+  function(input, output, session) {
 
     log_info("\n\n========================================================")
     log_info("starting geoschedule GUI", if(shiny::in_devmode()) " in DEV mode")
@@ -23,6 +22,5 @@ schedule_server <- function(data_sheet_id, gs_key_file) {
       else
         shiny::devmode(TRUE)
     })
-  })
-
+  }
 }
