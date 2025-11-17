@@ -14,7 +14,7 @@
 desc "run the shiny app in development mode"
 task :dev do
     puts "*** REMEMBER to start `rake guard` in a separate terminal for auto-reload"
-    cmd = "rm(list = ls()); Sys.setenv('LOG_LEVEL' = 'DEBUG'); shiny::devmode(TRUE); options(shiny.autoreload.pattern = 'app.R'); shiny::runApp('app.R', port = 4446)"
+    cmd = "rm(list = ls()); Sys.setenv('LOG_LEVEL' = 'DEBUG'); shiny::devmode(TRUE); options(shiny.autoreload.pattern = 'app.R'); shiny::runApp('app.R', port = 4444)"
     sh "R -e \"#{cmd}\""
 end
 

@@ -2,7 +2,7 @@
 #  - check for Ruby: ruby --version
 #  - install Bundler: gem install bundler
 #  - install Gems: bundle install
-#  - start 
+#  - follow instructions in Rakefile
 
 require 'thread'
 $debounce_timer = nil
