@@ -83,6 +83,8 @@ prepare_path_recommendations <- function(paths) {
 # get path specific list of classes
 prepare_path_classes <- function(paths, selected_path, classes) {
 
+  print(names(classes))
+
   path_classes <-
     paths |>
     dplyr::filter(path == !!selected_path) |>
@@ -116,7 +118,11 @@ combine_path_classes_with_schedule <- function(path_classes, schedule, selected_
   schedule_wide <-
     schedule |>
     dplyr::filter(term %in% !!selected_terms) |>
-    dplyr::mutate(info = "yes") |>
+    dplyr::mutate(
+      info = "yes",
+      term = factor(.data$term, levels = !!selected_terms)
+    ) |>
+    dplyr::arrange(.data$term) |>
     dplyr::slice_head(n = 1L, by = c("term", "class")) |>
     tidyr::pivot_wider(id_cols = c(class), names_from = term, values_from = info)
 
