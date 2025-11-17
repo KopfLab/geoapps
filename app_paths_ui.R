@@ -2,7 +2,7 @@
 paths_ui <- function() {
 
   # constants
-  app_title <- "Geopaths"
+  app_title <- "ERTH Paths"
   app_title_width <- 150
   app_color <- "green"
   spinner_color <- "#2c3b41"
