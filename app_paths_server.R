@@ -1,7 +1,6 @@
 # server
 paths_server <- function(data_sheet_id, gs_key_file) {
-
-  shinyServer(function(input, output, session) {
+  function(input, output, session) {
 
     log_info("\n\n========================================================")
     log_info("starting geopaths GUI", if(shiny::in_devmode()) " in DEV mode")
@@ -24,6 +23,5 @@ paths_server <- function(data_sheet_id, gs_key_file) {
         shiny::devmode(TRUE)
     })
 
-  })
-
+  }
 }
