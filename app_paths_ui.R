@@ -3,7 +3,7 @@ paths_ui <- function() {
 
   # constants
   app_title <- "ERTH Paths"
-  app_title_width <- 150
+  app_title_width <- 160
   app_color <- "green"
   spinner_color <- "#2c3b41"
   app_box_default <- "#2c3b41"
@@ -12,7 +12,10 @@ paths_ui <- function() {
   options(spinner.color = spinner_color)
 
   # header
-  header <- shinydashboard::dashboardHeader(title = app_title, titleWidth = app_title_width)
+  header <- shinydashboard::dashboardHeader(
+    title = app_title, titleWidth = app_title_width,
+    tags$li(class = "dropdown", tags$a(href = "https://apps.kopflab.org/app_direct/geoschedule", icon("link"), "Switch to ERTH Schedule App"))
+  )
 
   # sidebar
   sidebar <-
