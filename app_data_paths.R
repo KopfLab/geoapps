@@ -34,7 +34,7 @@ module_data_paths_server <- function(input, output, session, data_sheet_id, gs_k
     data_sheet_id = data_sheet_id, gs_key_file = gs_key_file, local_file = get_local_file,
     report_error = report_error,  reload_data = reload_data,
     sheet = "paths",
-    cols = c("path", "category", "category_description", "rec_min", "class", "reason")
+    cols = c("path_id", "path", "url", "category", "category_description", "rec_min", "class", "reason")
   )
 
   # schedule

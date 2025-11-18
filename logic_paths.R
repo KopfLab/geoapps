@@ -61,13 +61,22 @@ prepare_schedule <- function(schedule) {
 # prepare path recommmendation classes
 prepare_path_recommendations <- function(paths) {
   paths |>
-    fill_down_columns(c("path", "category")) |>
+    fill_down_columns(c("path_id", "category")) |>
+    dplyr::mutate(
+      path = .data$path[1],
+      url = .data$url[1],
+      .by = c("path_id")
+    ) |>
     dplyr::mutate(
       category_description = .data$category_description[1],
       rec_min = .data$rec_min[1],
-      .by = c("path", "category")
+      .by = c("path_id", "category")
     ) |>
     dplyr::mutate(row = dplyr::row_number(), .before = 1L) |>
+    # path with ID
+    dplyr::mutate(
+      path_w_id = sprintf("%s (%s)", .data$path, .data$path_id)
+    ) |>
     # category info
     dplyr::mutate(
       n = stringr::str_sub(rec_min, 1, 1),
@@ -80,14 +89,37 @@ prepare_path_recommendations <- function(paths) {
     )
 }
 
+# get all path classes
+prepare_all_path_classes <- function(paths, classes) {
+  paths |>
+  dplyr::rename("path_class" = "class") |>
+  dplyr::left_join(classes, by = "path_class") |>
+  dplyr::mutate(
+    .by = c("path_id", "category"),
+    total = dplyr::n()
+  ) |>
+  dplyr::mutate(
+    recommendation = ifelse(.data$n == "a", "take", sprintf("%s/%d", .data$n, .data$total))
+  ) |>
+  dplyr::mutate(
+    .by = "class",
+    major_category = 
+    if (any(!is.na(.data$category) & stringr::str_detect(.data$category, "[Ss]trongly"))) "Strongly recommended in some paths"
+    else if (any(!is.na(.data$category_info) & stringr::str_detect(.data$category_info, stringr::fixed("recommended")))) "Recommended in some paths"
+    else if (!is.na(.data$program[1]) && .data$program[1] == "GEOL") "Other GEOL upper division classes"
+    else "Other upper division classes"
+  ) |>
+  dplyr::select("program", "class", "title", "credits", "path_id", "major_category", "recommendation") |>
+  tidyr::pivot_wider(names_from = path_id, values_from = recommendation) |>
+  dplyr::arrange(dplyr::desc(.data$major_category), dplyr::desc(.data$program == "GEOL"), .data$program, .data$class) 
+}
+
 # get path specific list of classes
 prepare_path_classes <- function(paths, selected_path, classes) {
 
-  print(names(classes))
-
   path_classes <-
     paths |>
-    dplyr::filter(path == !!selected_path) |>
+    dplyr::filter(path_w_id == !!selected_path) |>
     dplyr::rename("path_class" = "class") |>
     dplyr::left_join(classes, by = "path_class")
 
@@ -138,6 +170,19 @@ combine_path_classes_with_schedule <- function(path_classes, schedule, selected_
       )
     )
 }
+
+prepare_all_paths_table_columns <- function(path_classes) {
+  path_classes |>
+    dplyr::mutate(
+      row = dplyr::row_number(),
+      Category = major_category,
+      Class = sprintf("%s(%s)", class, credits),
+      Title = title,
+      .before = 1L
+    ) |>
+    dplyr::select(-"program", -"class", -"credits", -"title", -"major_category")
+}
+
 
 prepare_path_classes_table_columns <- function(path_classes) {
   path_classes |>

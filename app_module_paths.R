@@ -60,13 +60,26 @@ module_paths_server <- function(input, output, session, data) {
   # get path names
   get_paths_list <- reactive({
     req(get_paths())
-    get_paths() |> dplyr::pull(path) |> unique()
+    c("ALL", get_paths() |> dplyr::pull(path_w_id) |> unique())
   })
 
   # selected path
   get_selected_path <- reactive({
     req(!is.null(input$path) && nchar(input$path) > 0)
     input$path
+  })
+
+  # is all selected
+  show_all_paths <- reactive({
+    req(get_selected_path())
+    identical(get_selected_path(), "ALL")
+  })
+
+  # selected path url
+  get_selected_path_url <- reactive({
+    req(get_paths())
+    req(get_selected_path())
+    dplyr::filter(get_paths(), .data$path_w_id == get_selected_path())$url[1]
   })
 
   # path for table
@@ -78,11 +91,19 @@ module_paths_server <- function(input, output, session, data) {
     req(get_selected_terms())
     # always reset visible columns to load new selection
     classes$reset_visible_columns()
-    log_info(ns = ns, "loading path with terms: ", paste(get_selected_terms(), collapse = ", "), user_msg = sprintf("Loading %s path", get_selected_path()))
-    get_paths() |>
-      prepare_path_classes(selected_path = get_selected_path(), classes = get_classes()) |>
-      combine_path_classes_with_schedule(get_schedule(), selected_terms = get_selected_terms()) |>
-      prepare_path_classes_table_columns()
+    if (show_all_paths()) {
+      log_info(ns = ns, "loading all paths with terms: ", paste(get_selected_terms(), collapse = ", "), user_msg = "Loading all paths")
+      get_paths() |>
+        prepare_all_path_classes(classes = get_classes()) |>
+        combine_path_classes_with_schedule(get_schedule(), selected_terms = get_selected_terms()) |>
+        prepare_all_paths_table_columns()
+    } else {
+      log_info(ns = ns, "loading path with terms: ", paste(get_selected_terms(), collapse = ", "), user_msg = sprintf("Loading %s path", get_selected_path()))
+      get_paths() |>
+        prepare_path_classes(selected_path = get_selected_path(), classes = get_classes()) |>
+        combine_path_classes_with_schedule(get_schedule(), selected_terms = get_selected_terms()) |>
+        prepare_path_classes_table_columns()
+    }
   })
 
   # generate UI =====================
@@ -120,9 +141,7 @@ module_paths_server <- function(input, output, session, data) {
           shinydashboard::box(
             title =
               span(
-                "Classes recommended for the ",
-                tags$strong(textOutput(ns("path_label"), inline = TRUE)),
-                " path",
+                htmlOutput(ns("path_label"), inline = TRUE),
                 div(
                   style = "position: absolute; right: 10px; top: 5px;",
                   module_selector_table_deselect_all_button(ns("classes"), border = FALSE),
@@ -141,9 +160,13 @@ module_paths_server <- function(input, output, session, data) {
   })
 
   # path label
-  output$path_label <- renderText({
+  output$path_label <- renderUI({
     req(get_selected_path())
-    get_selected_path()
+    if (show_all_paths()) {
+      "Overview of recommended classes by path in the Department of Earth Science"
+    } else {
+      tags$a("Classes recommended for the ", tags$strong(get_selected_path(), icon("link")), " path", href = get_selected_path_url(), target = "_blank")
+    }
   })
 
   # box visibility
