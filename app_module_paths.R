@@ -117,7 +117,7 @@ module_paths_server <- function(input, output, session, data) {
       selectInput(
         ns("path"), "Select path:",
         choices = c("Select path" = "", get_paths_list()),
-        selected = if (shiny::in_devmode()) get_paths_list()[1] else NULL
+        selected = get_paths_list()[1]
       ),
       selectizeInput(
         ns("last_term"), "Show terms to:",
