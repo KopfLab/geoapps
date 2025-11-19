@@ -104,10 +104,14 @@ prepare_all_path_classes <- function(paths, classes) {
   dplyr::mutate(
     .by = "class",
     major_category = 
-    if (any(!is.na(.data$category) & stringr::str_detect(.data$category, "[Ss]trongly"))) "Strongly recommended in some paths"
-    else if (any(!is.na(.data$category_info) & stringr::str_detect(.data$category_info, stringr::fixed("recommended")))) "Recommended in some paths"
+    if (any(!is.na(.data$category) & stringr::str_detect(.data$category, "[Rr]equired"))) "Required classes"
+    else if (any(!is.na(.data$category) & stringr::str_detect(.data$category, "[Ss]trongly"))) "Strongly recommended in some paths"
+    else if (any(!is.na(.data$category_info) & stringr::str_detect(.data$category_info, "[Rr]ecommended"))) "Recommended in some paths"
     else if (!is.na(.data$program[1]) && .data$program[1] == "GEOL") "Other GEOL upper division classes"
     else "Other upper division classes"
+  ) |>
+  dplyr::mutate(
+    major_category = factor(.data$major_category) |> forcats::fct_relevel("Required classes", after = Inf)
   ) |>
   dplyr::select("program", "class", "title", "credits", "path_id", "major_category", "recommendation") |>
   tidyr::pivot_wider(names_from = path_id, values_from = recommendation) |>
