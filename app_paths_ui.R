@@ -14,7 +14,7 @@ paths_ui <- function() {
   # header
   header <- shinydashboard::dashboardHeader(
     title = app_title, titleWidth = app_title_width,
-    tags$li(class = "dropdown", tags$a(href = "https://apps.kopflab.org/app_direct/geoschedule", icon("link"), "Switch to ERTH Schedule App"))
+    tags$li(class = "dropdown", tags$a(href = "https://apps.kopflab.org/geoschedule", icon("link"), "Switch to ERTH Schedule App"))
   )
 
   # sidebar

@@ -4,12 +4,13 @@ source("logic_terms.R")
 
 # convenience function to fill down columns
 fill_down_columns <- function(df, cols) {
-  for (col in cols)
+  for (col in cols) {
     df <-
       df |>
       dplyr::mutate(..fill = cumsum(!is.na(!!sym(col)))) |>
-      dplyr::mutate(dplyr::across(!!col, ~.x[1]), .by = ..fill) |>
+      dplyr::mutate(dplyr::across(!!col, ~ .x[1]), .by = ..fill) |>
       dplyr::select(-"..fill")
+  }
   return(df)
 }
 
@@ -40,7 +41,9 @@ prepare_classes <- function(classes) {
     dplyr::mutate(
       program = stringr::str_extract(.data$class, "^[^0-9]+"),
       number = stringr::str_extract(.data$class, "\\d+") |> as.integer(),
-      upper_division = !is.na(.data$number) & .data$number >= 3000 & .data$number < 5000
+      upper_division = !is.na(.data$number) &
+        .data$number >= 3000 &
+        .data$number < 5000
     )
 }
 
@@ -82,7 +85,11 @@ prepare_path_recommendations <- function(paths) {
       n = stringr::str_sub(rec_min, 1, 1),
       category_info = dplyr::case_when(
         is.na(.data$n) ~ .data$category,
-        stringr::str_detect(.data$n, "\\d") ~ sprintf("%s (at least %s recommended)", .data$category, .data$n),
+        stringr::str_detect(.data$n, "\\d") ~ sprintf(
+          "%s (at least %s recommended)",
+          .data$category,
+          .data$n
+        ),
         TRUE ~ sprintf("%s (take %s)", .data$category, .data$rec_min)
       ),
       .after = "category"
@@ -92,35 +99,72 @@ prepare_path_recommendations <- function(paths) {
 # get all path classes
 prepare_all_path_classes <- function(paths, classes) {
   paths |>
-  dplyr::rename("path_class" = "class") |>
-  dplyr::left_join(classes, by = "path_class") |>
-  dplyr::mutate(
-    .by = c("path_id", "category"),
-    total = dplyr::n()
-  ) |>
-  dplyr::mutate(
-    recommendation = ifelse(.data$n == "a", "take", sprintf("%s/%d", .data$n, .data$total))
-  ) |>
-  dplyr::mutate(
-    .by = "class",
-    major_category = 
-    if (any(!is.na(.data$category) & stringr::str_detect(.data$category, "[Rr]equired"))) "Required classes"
-    else if (any(!is.na(.data$category) & stringr::str_detect(.data$category, "[Ss]trongly"))) "Strongly recommended in some paths"
-    else if (any(!is.na(.data$category_info) & stringr::str_detect(.data$category_info, "[Rr]ecommended"))) "Recommended in some paths"
-    else if (!is.na(.data$program[1]) && .data$program[1] == "GEOL") "Other GEOL upper division classes"
-    else "Other upper division classes"
-  ) |>
-  dplyr::mutate(
-    major_category = factor(.data$major_category) |> forcats::fct_relevel("Required classes", after = Inf)
-  ) |>
-  dplyr::select("program", "class", "title", "credits", "path_id", "major_category", "recommendation") |>
-  tidyr::pivot_wider(names_from = path_id, values_from = recommendation) |>
-  dplyr::arrange(dplyr::desc(.data$major_category), dplyr::desc(.data$program == "GEOL"), .data$program, .data$class) 
+    dplyr::rename("path_class" = "class") |>
+    dplyr::left_join(classes, by = "path_class") |>
+    dplyr::mutate(
+      .by = c("path_id", "category"),
+      total = dplyr::n()
+    ) |>
+    dplyr::mutate(
+      recommendation = ifelse(
+        .data$n == "a",
+        "take",
+        sprintf("%s/%d", .data$n, .data$total)
+      )
+    ) |>
+    dplyr::mutate(
+      .by = "class",
+      major_category = if (
+        any(
+          !is.na(.data$category) &
+            stringr::str_detect(.data$category, "[Rr]equired")
+        )
+      ) {
+        "Required classes"
+      } else if (
+        any(
+          !is.na(.data$category) &
+            stringr::str_detect(.data$category, "[Ss]trongly")
+        )
+      ) {
+        "Strongly recommended in some paths"
+      } else if (
+        any(
+          !is.na(.data$category_info) &
+            stringr::str_detect(.data$category_info, "[Rr]ecommended")
+        )
+      ) {
+        "Recommended in some paths"
+      } else if (!is.na(.data$program[1]) && .data$program[1] == "ERTH") {
+        "Other ERTH upper division classes"
+      } else {
+        "Other upper division classes"
+      }
+    ) |>
+    dplyr::mutate(
+      major_category = factor(.data$major_category) |>
+        forcats::fct_relevel("Required classes", after = Inf)
+    ) |>
+    dplyr::select(
+      "program",
+      "class",
+      "title",
+      "credits",
+      "path_id",
+      "major_category",
+      "recommendation"
+    ) |>
+    tidyr::pivot_wider(names_from = path_id, values_from = recommendation) |>
+    dplyr::arrange(
+      dplyr::desc(.data$major_category),
+      dplyr::desc(.data$program == "ERTH"),
+      .data$program,
+      .data$class
+    )
 }
 
 # get path specific list of classes
 prepare_path_classes <- function(paths, selected_path, classes) {
-
   path_classes <-
     paths |>
     dplyr::filter(path_w_id == !!selected_path) |>
@@ -134,12 +178,12 @@ prepare_path_classes <- function(paths, selected_path, classes) {
       classes |>
         dplyr::filter(.data$upper_division) |>
         dplyr::anti_join(path_classes, by = c("path_class")) |>
-        dplyr::filter(.data$program == "GEOL") |>
-        dplyr::mutate(category_info = "Other GEOL upper division classes"),
+        dplyr::filter(.data$program == "ERTH") |>
+        dplyr::mutate(category_info = "Other ERTH upper division classes"),
       classes |>
         dplyr::filter(.data$upper_division) |>
         dplyr::anti_join(path_classes, by = c("path_class")) |>
-        dplyr::filter(.data$program != "GEOL") |>
+        dplyr::filter(.data$program != "ERTH") |>
         dplyr::mutate(category_info = "Other upper division classes")
     ) |>
     dplyr::slice_head(n = 1, by = "class") |>
@@ -150,7 +194,11 @@ prepare_path_classes <- function(paths, selected_path, classes) {
   return(available_classes)
 }
 
-combine_path_classes_with_schedule <- function(path_classes, schedule, selected_terms) {
+combine_path_classes_with_schedule <- function(
+  path_classes,
+  schedule,
+  selected_terms
+) {
   schedule_wide <-
     schedule |>
     dplyr::filter(term %in% !!selected_terms) |>
@@ -160,17 +208,22 @@ combine_path_classes_with_schedule <- function(path_classes, schedule, selected_
     ) |>
     dplyr::arrange(.data$term) |>
     dplyr::slice_head(n = 1L, by = c("term", "class")) |>
-    tidyr::pivot_wider(id_cols = c(class), names_from = term, values_from = info)
+    tidyr::pivot_wider(
+      id_cols = c(class),
+      names_from = term,
+      values_from = info
+    )
 
   path_classes |>
     dplyr::left_join(schedule_wide, by = "class") |>
     dplyr::mutate(
       dplyr::across(
         dplyr::any_of(!!selected_terms),
-        ~dplyr::case_when(
+        ~ dplyr::case_when(
           !is.na(.x) ~ .x,
-          .data$program != "GEOL" ~ "?",
-          TRUE ~ "no")
+          .data$program != "ERTH" ~ "?",
+          TRUE ~ "no"
+        )
       )
     )
 }
@@ -191,18 +244,25 @@ prepare_all_paths_table_columns <- function(path_classes) {
 prepare_path_classes_table_columns <- function(path_classes) {
   path_classes |>
     dplyr::mutate(
-      Category =
-        ifelse(
-          !is.na(category_description),
-          sprintf("%s<br/><i>%s</i>",
-                  htmltools::htmlEscape(category_info),
-                  htmltools::htmlEscape(category_description)),
-          htmltools::htmlEscape(category_info)
+      Category = ifelse(
+        !is.na(category_description),
+        sprintf(
+          "%s<br/><i>%s</i>",
+          htmltools::htmlEscape(category_info),
+          htmltools::htmlEscape(category_description)
         ),
+        htmltools::htmlEscape(category_info)
+      ),
       Class = sprintf("%s(%s)", class, credits),
       Title = title,
       `Relevance for this path` = reason,
     ) |>
-    dplyr::select("row", "Category", "Class", "Title", "Relevance for this path", dplyr::matches(get_term_regexp()))
+    dplyr::select(
+      "row",
+      "Category",
+      "Class",
+      "Title",
+      "Relevance for this path",
+      dplyr::matches(get_term_regexp())
+    )
 }
-
